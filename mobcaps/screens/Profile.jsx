@@ -61,10 +61,15 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
   const [userEmail, setUserEmail] = useState(null);
 
   const [authToken, setAuthToken] = useState(null);
+  const [phoneVerified, setPhoneVerified] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneInput, setPhoneInput] = useState('');
   const [phoneEditMode, setPhoneEditMode] = useState(false);
   const [phoneSaving, setPhoneSaving] = useState(false);
+  const [verifyMode, setVerifyMode] = useState(false);
+  const [verifyCode, setVerifyCode] = useState('');
+  const [verifySending, setVerifySending] = useState(false);
+  const [verifySubmitting, setVerifySubmitting] = useState(false);
 
   const [customerData, setCustomerData] = useState({
     firstName: '',
@@ -213,6 +218,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
 
         setPhoneNumber(data.phoneNumber || '');
         setPhoneInput(data.phoneNumber || '');
+        setPhoneVerified(Boolean(data.phoneVerified));
         setCustomerData(prev => ({
           ...prev,
           firstName,
@@ -232,6 +238,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
             ...current,
             firstName,
             lastName,
+            phoneVerified: Boolean(data.phoneVerified),
           };
           await sessionService.saveSession(updatedUser, token);
           setCurrentUser(updatedUser);
@@ -647,7 +654,73 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
     }
   };
 
+  const handleSendVerification = async () => {
+    setVerifySending(true);
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/customers/phone-verification/send`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
 
+      const data = await response.json();
+      if (response.ok) {
+        setVerifyMode(true);
+        showCustomAlert('Code Sent', 'Please check your SMS for the verification code.');
+      } else {
+        showCustomAlert('Failed to Send', data.message || 'Could not send verification code.');
+      }
+    } catch (error) {
+      console.error('Error sending verification:', error);
+      showCustomAlert('Connection Error', 'Could not connect to the server.');
+    } finally {
+      setVerifySending(false);
+    }
+  };
+
+  const handleConfirmVerification = async () => {
+    if (!verifyCode.trim()) {
+      showCustomAlert('Invalid Code', 'Please enter the verification code.');
+      return;
+    }
+
+    setVerifySubmitting(true);
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/customers/phone-verification/verify`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code: verifyCode.trim() }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setPhoneVerified(true);
+        setVerifyMode(false);
+        setVerifyCode('');
+        
+        // Update session
+        if (currentUser) {
+          const updatedUser = { ...currentUser, phoneVerified: true };
+          await sessionService.saveSession(updatedUser, authToken);
+          setCurrentUser(updatedUser);
+        }
+        
+        showCustomAlert('Phone number verified!', 'You can now create rentals.');
+      } else {
+        showCustomAlert('Verification Failed', data.message || 'The verification code is incorrect.');
+      }
+    } catch (error) {
+      console.error('Error verifying phone:', error);
+      showCustomAlert('Connection Error', 'Could not connect to the server.');
+    } finally {
+      setVerifySubmitting(false);
+    }
+  };
 
   const handleSaveProfile = async (updatedData) => {
     setIsEditLoading(true);
@@ -888,9 +961,56 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Phone Number</Text>
-                {phoneNumber ? (
-                  <View style={styles.readOnlyField}>
-                    <Text style={styles.readOnlyFieldText}>{phoneNumber}</Text>
+                {phoneVerified ? (
+                  <View style={styles.verifiedContainer}>
+                    <View style={styles.readOnlyField}>
+                      <Text style={styles.readOnlyFieldText}>{phoneNumber}</Text>
+                    </View>
+                    <View style={styles.verifiedBadge}>
+                      <Text style={styles.verifiedBadgeText}>✓ Verified</Text>
+                    </View>
+                  </View>
+                ) : phoneNumber ? (
+                  <View style={styles.unverifiedContainer}>
+                    <View style={styles.readOnlyField}>
+                      <Text style={styles.readOnlyFieldText}>{phoneNumber}</Text>
+                    </View>
+                    <View style={styles.unverifiedStatusRow}>
+                      <View style={styles.unverifiedBadge}>
+                        <Text style={styles.unverifiedBadgeText}>! Not verified</Text>
+                      </View>
+                      <TouchableOpacity 
+                        style={styles.verifyBtn} 
+                        onPress={handleSendVerification}
+                        disabled={verifySending}
+                      >
+                        <Text style={styles.verifyBtnText}>
+                          {verifySending ? 'Sending...' : 'Verify Phone Number'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    {verifyMode && (
+                      <View style={styles.verificationInputRow}>
+                        <TextInput
+                          style={styles.verificationInput}
+                          placeholder="6-digit code"
+                          value={verifyCode}
+                          onChangeText={setVerifyCode}
+                          keyboardType="numeric"
+                          maxLength={6}
+                        />
+                        <TouchableOpacity 
+                          style={styles.confirmCodeBtn} 
+                          onPress={handleConfirmVerification}
+                          disabled={verifySubmitting}
+                        >
+                          <Text style={styles.confirmCodeBtnText}>
+                            {verifySubmitting ? '...' : 'Confirm'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 ) : (
                   <View style={styles.emptyPhoneContainer}>
