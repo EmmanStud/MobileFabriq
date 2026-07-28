@@ -99,7 +99,9 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
   // UI State
   const [menuVisible, setMenuVisible] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
-  const [authMode, setAuthMode] = useState(null); // 'login', 'signup', 'verify', or null
+  const [authMode, setAuthMode] = useState(null); // 'login', 'signup', or null
+  const [verificationStep, setVerificationStep] = useState('form'); // 'form' | 'mobile' | 'email'
+  const [phoneVerified, setPhoneVerified] = useState(false);
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   
   // Form State
@@ -126,6 +128,8 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
   const [isLoading, setIsLoading] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
   const [successModal, setSuccessModal] = useState(false);
+  const [successModalMessage, setSuccessModalMessage] = useState('');
+  const [successModalSubtext, setSuccessModalSubtext] = useState('');
   
   // Phone Verification State
   const [phoneOtpCode, setPhoneOtpCode] = useState('');
@@ -153,6 +157,11 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
   const validateContactNumber = (value) => {
     const phoneRegex = /^09\d{9}$/;
     return phoneRegex.test(value || '');
+  };
+
+  const formatPhilippinesPhone = (value) => {
+    const trimmed = (value || '').trim();
+    return trimmed.startsWith('09') ? `+63${trimmed.slice(1)}` : trimmed;
   };
 
   const handleSignupContactNumberChange = (value) => {
@@ -365,7 +374,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
       }
 
       // SMS sent — show phone OTP panel
-      setAuthMode('verifyPhone');
+      setVerificationStep('mobile');
       setAuthMessage('SMS CODE SENT TO ' + signupForm.contactNumber);
 
     } catch (err) {
@@ -401,10 +410,12 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         return;
       }
 
-      // Phone verified ✅ — now call POST /auth/signup to send email verification
+      // Phone verified ✅ — return to signup form and prompt for email verification
       setPhoneOtpCode('');
+      setPhoneVerified(true);
+      setVerificationStep('form');
+      setAuthMessage('PHONE VERIFIED. PLEASE VERIFY YOUR EMAIL.');
       setErrors({});
-      await handleSignup(); // this calls POST /auth/signup which now succeeds since phoneVerified=true
 
     } catch (err) {
       setErrors({ general: 'Connection error. Please try again.' });
@@ -458,7 +469,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         lastName: signupForm.lastName.trim(),
         email: email,
         password: signupForm.password,
-        phoneNumber: signupForm.contactNumber.trim(),
+        phoneNumber: formatPhilippinesPhone(signupForm.contactNumber),
       };
 
       console.log('📤 Sending signup request:', requestBody);
@@ -478,7 +489,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         throw new Error(responseData.message || "Sign up failed");
       }
 
-      setAuthMode('verify');
+      setVerificationStep('email');
       signupTimer.startTimer();
       setAuthMessage(responseData.message || 'VERIFICATION CODE SENT TO YOUR EMAIL');
     } catch (error) {
@@ -514,55 +525,21 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
 
       if (response.ok) {
         setAuthMessage('EMAIL VERIFIED SUCCESSFULLY');
-        
-        // Save session and navigate in
-        await sessionService.saveSession(data.user, data.token);
+        setSuccessModalMessage('Your email has been verified successfully.');
+        setSuccessModalSubtext('You can now log in with your account.');
+        setSuccessModal(true);
 
-        // REGISTER DEVICE FOR PUSH NOTIFICATIONS
-        if (data.token) {
-          try {
-            const pushToken = await registerForPushNotificationsAsync();
-            if (pushToken) {
-              await notificationAPI.registerDeviceToken(data.token, pushToken);
-              console.log('📱 Device registered for push notifications (after verification)');
-            }
-          } catch (pushErr) {
-            console.warn('⚠️ Push notification registration skipped:', pushErr.message);
-          }
-        }
-
-        // Bug Fix: Initialize customer details document after verification
-        try {
-          console.log('🔄 Initializing customer profile details...');
-          const profileResponse = await fetch(`${API_URL}/customers/profile`, {
-            method: 'PUT',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${data.token}`
-            },
-            body: JSON.stringify({
-              firstName: data.user.firstName,
-              lastName: data.user.lastName,
-              phoneNumber: data.user.phoneNumber || '',
-              address: '',
-              preferredBranch: 'Taguig Main - Cadena de Amor'
-            }),
-          });
-          if (!profileResponse.ok) {
-            const profileErr = await profileResponse.json();
-            console.warn('⚠️ Profile initialization warning:', profileErr.message);
-          } else {
-            console.log('✅ Customer profile initialized successfully');
-          }
-        } catch (initErr) {
-          console.warn('⚠️ Background profile initialization failed:', initErr);
-        }
-
-        setIsLoggedIn(true);
-        setAuthMode(null);
-        setSignupForm({ firstName: '', lastName: '', contactNumber: '', email: '', password: '', confirmPassword: '', code: '' });
-        setAuthMessage('');
-        setErrors({});
+        setTimeout(() => {
+          setSuccessModal(false);
+          setSuccessModalMessage('');
+          setSuccessModalSubtext('');
+          setAuthMode('login');
+          setVerificationStep('form');
+          setPhoneVerified(false);
+          setSignupForm({ firstName: '', lastName: '', contactNumber: '', email: '', password: '', confirmPassword: '', code: '' });
+          setErrors({});
+          setAuthMessage('');
+        }, 2500);
       } else {
         setErrors({ code: data.message || 'INVALID VERIFICATION CODE. PLEASE TRY AGAIN' });
       }
@@ -579,11 +556,17 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
     if (authMode === 'login') {
       await handleLogin();
     } else if (authMode === 'signup') {
-      await handleSendPhoneOtp(); // Step 1: send SMS OTP first
-    } else if (authMode === 'verifyPhone') {
-      await handleVerifyPhone(); // Step 2: verify SMS OTP → triggers handleSignup → Step 3
-    } else if (authMode === 'verify') {
-      await handleVerification(); // Step 4: verify email OTP
+      if (verificationStep === 'form') {
+        if (!phoneVerified) {
+          await handleSendPhoneOtp();
+        } else {
+          await handleSignup();
+        }
+      } else if (verificationStep === 'mobile') {
+        await handleVerifyPhone();
+      } else if (verificationStep === 'email') {
+        await handleVerification();
+      }
     } else if (authMode === 'forgotPassword') {
       await handleForgotPasswordAction();
     }
@@ -683,6 +666,8 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
       );
       
       if (result.success) {
+        setSuccessModalMessage('Your password has been reset successfully.');
+        setSuccessModalSubtext('You can now log in with your new password.');
         setSuccessModal(true);
         
         // Reset all forms
@@ -690,6 +675,8 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
           setForgotPasswordForm({ email: '', code: '', newPassword: '', confirmPassword: '', step: 'email' });
           setAuthMode('login');
           setSuccessModal(false);
+          setSuccessModalMessage('');
+          setSuccessModalSubtext('');
           setErrors({});
         }, 3000);
       } else {
@@ -714,7 +701,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         lastName: signupForm.lastName.trim(),
         email: signupForm.email.trim().toLowerCase(),
         password: signupForm.password,
-        phoneNumber: signupForm.contactNumber.trim(),
+        phoneNumber: formatPhilippinesPhone(signupForm.contactNumber),
       };
 
       const response = await fetch(`${API_URL}/auth/signup`, {
@@ -1004,6 +991,8 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
     <View style={styles.authCard}>
       <TouchableOpacity style={styles.authClose} onPress={() => {
         setAuthMode(null); 
+        setVerificationStep('form');
+        setPhoneVerified(false);
         setErrors({});
         setLoginForm({ email: '', password: '' });
         setSignupForm({ firstName: '', lastName: '', contactNumber: '', email: '', password: '', confirmPassword: '', code: '' });
@@ -1017,24 +1006,27 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
       </TouchableOpacity>
 
       <Text style={styles.authTitle}>
-        {authMode === 'verifyPhone' ? 'Verify Phone Number'
-          : authMode === 'verify' ? 'Verify Email'
+        {authMode === 'signup' && verificationStep === 'mobile' ? 'Verify Mobile Number'
+          : authMode === 'signup' && verificationStep === 'email' ? 'Verify Email Address'
           : authMode === 'signup' ? 'Create Account'
+          : authMode === 'login' ? 'Welcome Back'
           : 'Welcome Back'}
       </Text>
       <Text style={styles.authSub}>
-        {authMode === 'verifyPhone'
+        {authMode === 'signup' && verificationStep === 'mobile'
           ? `Enter the 6-digit SMS code sent to ${signupForm.contactNumber}`
-          : authMode === 'verify'
+          : authMode === 'signup' && verificationStep === 'email'
           ? `Enter the verification code sent to ${signupForm.email}`
           : authMode === 'signup'
           ? 'Create your account to get started'
-          : 'Sign in to continue your journey with us'}
+          : authMode === 'login'
+          ? 'Sign in to continue your journey with us'
+          : ''}
       </Text>
 
       <View style={styles.authForm}>
-        {/* FIRST NAME AND LAST NAME FIELDS (Only for Signup) */}
-        {authMode === 'signup' && (
+        {/* FIRST NAME AND LAST NAME FIELDS (Only for Signup form) */}
+        {authMode === 'signup' && verificationStep === 'form' && (
           <>
             <View style={styles.nameRow}>
               <View style={[styles.inputGroup, styles.nameCol]}>
@@ -1089,7 +1081,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
           </>
         )}
 
-        {authMode !== 'verify' && (
+        {((authMode === 'login') || (authMode === 'signup' && verificationStep === 'form')) && (
           <>
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>EMAIL ADDRESS</Text>
@@ -1181,7 +1173,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
           </>
         )}
 
-        {authMode === 'signup' && (
+        {authMode === 'signup' && verificationStep === 'form' && (
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>CONFIRM PASSWORD</Text>
             <View style={styles.passwordInputWrapper}>
@@ -1208,7 +1200,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         )}
 
         {/* ── PHONE OTP PANEL ── */}
-        {authMode === 'verifyPhone' && (
+        {authMode === 'signup' && verificationStep === 'mobile' && (
           <View style={styles.inputGroup}>
 
             {/* Step indicator */}
@@ -1276,7 +1268,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
           </View>
         )}
 
-        {authMode === 'verify' && (
+        {authMode === 'signup' && verificationStep === 'email' && (
           <View style={styles.inputGroup}>
             <Text style={styles.verifySub}>We sent a code to {signupForm.email}</Text>
             <TextInput
@@ -1429,10 +1421,15 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
           <Text style={styles.authSubmitText}>
             {isLoading || phoneVerifSending || phoneVerifSubmitting
               ? 'PLEASE WAIT...'
-              : authMode === 'verifyPhone' ? 'VERIFY PHONE'
-              : authMode === 'verify' ? 'VERIFY EMAIL'
-              : authMode === 'signup' ? 'SEND VERIFICATION CODE'
-              : 'SIGN IN'}
+              : authMode === 'signup'
+                ? verificationStep === 'mobile'
+                  ? 'VERIFY NUMBER'
+                  : verificationStep === 'email'
+                    ? 'VERIFY EMAIL'
+                    : phoneVerified
+                      ? 'VERIFY EMAIL'
+                      : 'SEND VERIFICATION CODE'
+                : 'SIGN IN'}
           </Text>
         </TouchableOpacity>
 
@@ -1628,8 +1625,8 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
   <View style={styles.successOverlay}>
     <View style={styles.successModalBox}>
       <Text style={styles.successTitle}>✓ Success!</Text>
-      <Text style={styles.successMessage}>Your password has been reset successfully.</Text>
-      <Text style={styles.successSubtext}>You can now log in with your new password.</Text>
+      <Text style={styles.successMessage}>{successModalMessage || 'Operation completed successfully.'}</Text>
+      <Text style={styles.successSubtext}>{successModalSubtext || 'You can now continue by signing in.'}</Text>
     </View>
   </View>
 </Modal>

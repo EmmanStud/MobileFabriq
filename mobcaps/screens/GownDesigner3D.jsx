@@ -12,7 +12,7 @@ import {
 import { buildGownPrompt, submitGownGeneration, pollGownTask } from '../services/meshyService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const LOCAL_SERVER = 'http://192.168.1.6:3456';
+const LOCAL_SERVER = 'fabriq-3d-server-production.up.railway.app';
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
 

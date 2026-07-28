@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
 require('dotenv').config();
+const skinAnalysisRouter = require('./routes/skinAnalysis.js');
 
 const app = express();
 const PORT = process.env.PORT || 3456;
@@ -27,6 +28,7 @@ app.use(express.json());
 
 // Serve uploaded images as static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api/skin-analysis', skinAnalysisRouter);
 
 
 
@@ -1849,3 +1851,9 @@ app.get('/api/appointments/user/:email', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+module.exports = {
+  authenticateToken,
+  CustomerAccount,
+  SkinAnalysis,
+};

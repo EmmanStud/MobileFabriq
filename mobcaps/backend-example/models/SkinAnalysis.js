@@ -42,4 +42,4 @@ SkinAnalysisSchema.pre('save', function(next) {
   next();
 });
 
-module.exports = mongoose.model('SkinAnalysis', SkinAnalysisSchema, 'skin_analyses');
+module.exports = mongoose.model('SkinAnalysis', SkinAnalysisSchema, 'color_anal');
