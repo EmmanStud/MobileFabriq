@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react'; 
-import { AppState } from 'react-native'; 
+import { AppState, TouchableOpacity, View, StyleSheet } from 'react-native'; 
 import { NavigationContainer } from '@react-navigation/native'; 
 import { createNativeStackNavigator } from '@react-navigation/native-stack'; 
+import { MessageCircle } from 'lucide-react-native';
 import { validateAPIConfig, API_URL } from './services/apiConfig'; 
 import { sessionService } from './services/sessionService'; 
 import { mongodbService } from './services/mongodbService'; 
- 
+
+import ChatModal from './components/ChatModal'; 
 import SplashScreen from './screens/Splash'; 
 import Home from './screens/Home'; 
 import Collection from './screens/Collection'; 
@@ -24,6 +26,7 @@ export default function App() {
   const [isLoaded, setIsLoaded] = useState(false); 
   const [unreadCount, setUnreadCount] = useState(0); 
   const [authToken, setAuthToken] = useState(null); 
+  const [chatVisible, setChatVisible] = useState(false);
   const pollIntervalRef = useRef(null); 
   const appStateRef = useRef(AppState.currentState); 
   const isLoadedRef = useRef(false); 
@@ -157,6 +160,46 @@ export default function App() {
           </> 
         )} 
       </Stack.Navigator> 
+
+      {/* Floating Chat Button */}
+      <View style={chatStyles.floatingContainer} pointerEvents="box-none">
+        <TouchableOpacity
+          style={chatStyles.floatingBtn}
+          onPress={() => setChatVisible(true)}
+          activeOpacity={0.85}
+        >
+          <MessageCircle size={28} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Chat Modal */}
+      <ChatModal
+        visible={chatVisible}
+        onClose={() => setChatVisible(false)}
+      />
     </NavigationContainer> 
   ); 
 } 
+
+const chatStyles = StyleSheet.create({
+  floatingContainer: {
+    position: 'absolute',
+    bottom: 32,
+    right: 24,
+    zIndex: 999,
+    elevation: 999,
+  },
+  floatingBtn: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#6B5D4F',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#1a1a1a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+});
