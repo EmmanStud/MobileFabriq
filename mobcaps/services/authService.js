@@ -38,6 +38,16 @@ export const userDB = {
     }
   },
 
+  // Find user by phone number
+  async findByPhone(phone) {
+    try {
+      return await mongodbService.findByPhone(phone);
+    } catch (err) {
+      console.error('Error finding user by phone:', err);
+      return null;
+    }
+  },
+
   // Create new user
   async create(user) {
     try {
@@ -113,7 +123,7 @@ export const validators = {
       if (!/[0-9]/.test(value)) {
         return 'MUST INCLUDE A NUMBER';
       }
-      if (!/[!@#$%^&*]/.test(value)) {
+      if (!/[!@#$%^&*_]/.test(value)) {
         return 'MUST INCLUDE A SPECIAL CHARACTER';
       }
     }
@@ -220,6 +230,6 @@ export const passwordChecklist = (pwd = '') => {
     uppercase: /[A-Z]/.test(value),
     lowercase: /[a-z]/.test(value),
     number: /[0-9]/.test(value),
-    special: /[!@#$%^&*]/.test(value),
+    special: /[!@#$%^&*_]/.test(value),
   };
 };

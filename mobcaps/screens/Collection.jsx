@@ -290,7 +290,7 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
                     style={styles.favBtn}
                     onPress={() => toggleFavorite(item.id)}
                 >
-                    <Heart size={18} color={favorites.includes(item.id) ? '#e11d48' : '#6B5D4F'} />
+                    <Heart size={18} color={favorites.includes(item.id) ? '#e11d48' : '#6B5D4F'} fill={favorites.includes(item.id) ? '#e11d48' : 'none'} />
                 </TouchableOpacity>
             </View>
 

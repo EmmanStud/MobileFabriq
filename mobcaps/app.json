@@ -22,6 +22,7 @@
     "android": {
       "package": "com.expoman123.mobcaps",
       "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FAF7F0"

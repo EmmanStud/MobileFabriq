@@ -161,22 +161,26 @@ export default function App() {
         )} 
       </Stack.Navigator> 
 
-      {/* Floating Chat Button */}
-      <View style={chatStyles.floatingContainer} pointerEvents="box-none">
-        <TouchableOpacity
-          style={chatStyles.floatingBtn}
-          onPress={() => setChatVisible(true)}
-          activeOpacity={0.85}
-        >
-          <MessageCircle size={28} color="#fff" />
-        </TouchableOpacity>
-      </View>
+      {isLoaded && (
+        <>
+          {/* Floating Chat Button */}
+          <View style={chatStyles.floatingContainer} pointerEvents="box-none">
+            <TouchableOpacity
+              style={chatStyles.floatingBtn}
+              onPress={() => setChatVisible(true)}
+              activeOpacity={0.85}
+            >
+              <MessageCircle size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
 
-      {/* Chat Modal */}
-      <ChatModal
-        visible={chatVisible}
-        onClose={() => setChatVisible(false)}
-      />
+          {/* Chat Modal */}
+          <ChatModal
+            visible={chatVisible}
+            onClose={() => setChatVisible(false)}
+          />
+        </>
+      )}
     </NavigationContainer> 
   ); 
 } 

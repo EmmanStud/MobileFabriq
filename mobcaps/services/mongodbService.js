@@ -99,6 +99,43 @@ export const mongodbService = {
     }
   },
 
+  // Find user by phone number
+  async findByPhone(phone) {
+    try {
+      if (!MONGODB_API_URL) {
+        console.warn('MongoDB API URL not configured');
+        return null;
+      }
+
+      const normalizedPhone = (phone || '').replace(/\D/g, '');
+      const url = `${MONGODB_API_URL}/users/phone/${encodeURIComponent(normalizedPhone)}`;
+      console.log(`📡 Finding user by phone: ${url}`);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`✅ User found by phone:`, data.user);
+        return data.user || null;
+      }
+
+      if (response.status === 404) {
+        console.log(`ℹ️  User not found by phone (404)`);
+        return null;
+      }
+
+      const errorText = await response.text();
+      console.warn(`❌ findByPhone server error (${response.status}):`, errorText);
+      return null;
+    } catch (err) {
+      console.error('❌ Error finding user by phone:', err.message);
+      return null;
+    }
+  },
+
   // Create new user using the web backend user creation endpoint
   async create(user) {
     try {

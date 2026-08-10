@@ -3,7 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { 
   View, Text, ScrollView, TouchableOpacity, Image, 
-  StyleSheet, SafeAreaView, Modal, TextInput, FlatList, Dimensions
+  StyleSheet, SafeAreaView, Modal, TextInput, FlatList, Dimensions,
+  KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback
 } from 'react-native';
 import { 
   Menu, X, ArrowRight, ShoppingBag, Calendar, 
@@ -87,7 +88,97 @@ const topGowns = [
   }
 ];
 
-
+const accountTermsSections = [
+  {
+    title: '1. Eligibility',
+    body: [
+      'By registering for an account, you confirm that:',
+      'You are at least 18 years old.',
+      'You are legally capable of entering into a binding agreement under Philippine law.',
+      'All information you provide is accurate, complete, and up to date.',
+    ],
+  },
+  {
+    title: '2. Account Registration',
+    body: [
+      'Users must provide valid and truthful information, including a working email address.',
+      'You are responsible for maintaining the confidentiality of your account credentials.',
+      'You agree to notify us immediately of any unauthorized use of your account.',
+    ],
+  },
+  {
+    title: '3. User Responsibilities',
+    body: [
+      'By using this website, you agree:',
+      'Not to engage in fraudulent, illegal, or harmful activities.',
+      'Not to upload or transmit viruses, malicious code, or spam.',
+      'To use the website only for lawful purposes related to browsing and purchasing products.',
+      'To respect other users and avoid abusive or inappropriate behavior.',
+    ],
+  },
+  {
+    title: '4. Orders and Payments',
+    body: [
+      'All orders are subject to availability and confirmation.',
+      'Prices and product descriptions may change without prior notice.',
+      'You agree to provide accurate payment and billing information.',
+      'Hannah Vanessa Boutique reserves the right to cancel or refuse any order if fraud or unauthorized activity is suspected.',
+    ],
+  },
+  {
+    title: '5. Privacy and Data Protection',
+    body: [
+      'Your personal data will be handled in accordance with the Data Privacy Act of 2012 (Republic Act No. 10173).',
+      'By creating an account, you consent to the collection, use, and storage of your personal information for order processing and service improvement.',
+      'We implement reasonable security measures to protect your data, but absolute security cannot be guaranteed.',
+    ],
+  },
+  {
+    title: '6. Account Suspension or Termination',
+    body: [
+      'We reserve the right to:',
+      'Suspend or terminate accounts that violate these Terms and Conditions.',
+      'Remove or restrict access to content that is unlawful or harmful.',
+      'Deny service at our discretion, with or without prior notice.',
+    ],
+  },
+  {
+    title: '7. Intellectual Property',
+    body: [
+      'All content on this website, including logos, images, text, and designs, are the property of Hannah Vanessa Boutique.',
+      'You may not reproduce, distribute, or exploit any content without prior written permission.',
+    ],
+  },
+  {
+    title: '8. Limitation of Liability',
+    body: [
+      'Hannah Vanessa Boutique shall not be liable for any direct, indirect, or incidental damages arising from the use of the website.',
+      'All services are provided on an "as is" and "as available" basis.',
+    ],
+  },
+  {
+    title: '9. Changes to Terms',
+    body: [
+      'We reserve the right to update or modify these Terms at any time.',
+      'Continued use of the website after changes constitutes your acceptance of the updated Terms.',
+    ],
+  },
+  {
+    title: '10. Governing Law',
+    body: [
+      'These Terms and Conditions shall be governed by and interpreted in accordance with the laws of the Republic of the Philippines.',
+    ],
+  },
+  {
+    title: '11. Contact Information',
+    body: [
+      'For questions or concerns regarding these Terms, you may contact us at:',
+      'Email: hannahvanessaexclusive@gmail.com',
+      'Phone: 0917 593 1093',
+      'Address: Blk 185 Lot 09 Cadena de Amor St, corner Kampupot, Taguig, 1218',
+    ],
+  },
+];
 
 export default function Home({ navigation, route, onLogin, onLogout, unreadCount = 0 }) {
 
@@ -135,6 +226,9 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
   const [phoneOtpCode, setPhoneOtpCode] = useState('');
   const [phoneVerifSending, setPhoneVerifSending] = useState(false);
   const [phoneVerifSubmitting, setPhoneVerifSubmitting] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
+  const [hasScrolledTermsToBottom, setHasScrolledTermsToBottom] = useState(false);
   
   // Password Masking
   const [showLoginPassword, setShowLoginPassword] = useState(false);
@@ -354,6 +448,16 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
       // Phone number must be in +63XXXXXXXXXX format for backend
       const phoneNumber = '+63' + signupForm.contactNumber.slice(1);
 
+      // --- NEW: Check if this mobile number is already registered/verified ---
+      const existingPhoneUser = await userDB.findByPhone(phoneNumber);
+      if (existingPhoneUser) {
+        setErrors({
+          contactNumber: 'This mobile number is already verified/registered. Please log in instead.',
+        });
+        setPhoneVerifSending(false);
+        return;
+      }
+
       const response = await fetch(`${API_URL}/auth/signup/phone/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -422,6 +526,24 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
     } finally {
       setPhoneVerifSubmitting(false);
     }
+  };
+
+  const handleTermsScroll = (event) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const isAtBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 20;
+    if (isAtBottom) {
+      setHasScrolledTermsToBottom(true);
+    }
+  };
+
+  const handleRefuseTerms = () => {
+    setShowTermsModal(false);
+  };
+
+  const handleContinueTerms = async () => {
+    setHasAcceptedTerms(true);
+    setShowTermsModal(false);
+    await handleSignup();
   };
 
   // Handle signup
@@ -495,6 +617,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
     } catch (error) {
       console.error('Signup error:', error);
       setErrors({ general: error.message });
+      setHasAcceptedTerms(false);
     } finally {
       setIsLoading(false);
     }
@@ -559,6 +682,9 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
       if (verificationStep === 'form') {
         if (!phoneVerified) {
           await handleSendPhoneOtp();
+        } else if (!hasAcceptedTerms) {
+          setHasScrolledTermsToBottom(false);
+          setShowTermsModal(true);
         } else {
           await handleSignup();
         }
@@ -987,12 +1113,29 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
 
       {/* AUTH MODAL */}
       <Modal visible={authMode !== null} animationType="fade" transparent={true}>
-  <View style={styles.authOverlay}>
-    <View style={styles.authCard}>
+  <KeyboardAvoidingView
+    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    style={{ flex: 1 }}
+  >
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={styles.authOverlay}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.authCard}>
       <TouchableOpacity style={styles.authClose} onPress={() => {
         setAuthMode(null); 
         setVerificationStep('form');
         setPhoneVerified(false);
+        setHasAcceptedTerms(false);
+        setHasScrolledTermsToBottom(false);
+        setShowTermsModal(false);
         setErrors({});
         setLoginForm({ email: '', password: '' });
         setSignupForm({ firstName: '', lastName: '', contactNumber: '', email: '', password: '', confirmPassword: '', code: '' });
@@ -1109,7 +1252,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
               <Text style={styles.inputLabel}>PASSWORD</Text>
               <View style={styles.passwordInputWrapper}>
                 <TextInput
-                  style={[styles.authInput, errors.password && styles.inputErrorBorder, { flex: 1 }]}
+                  style={[styles.authInput, errors.password && styles.inputErrorBorder, { flex: 1, color: '#1a1a1a' }]}
                   onChangeText={(val) => {
                     if (authMode === 'signup') { 
                       const updatedForm = { ...signupForm, password: val };
@@ -1136,9 +1279,9 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
                   style={styles.eyeIcon}
                 >
                   {authMode === 'signup' ? (
-                    showSignupPassword ? <EyeOff size={20} color="#999" /> : <Eye size={20} color="#999" />
+                    showSignupPassword ? <Eye size={20} color="#999" /> : <EyeOff size={20} color="#999" />
                   ) : (
-                    showLoginPassword ? <EyeOff size={20} color="#999" /> : <Eye size={20} color="#999" />
+                    showLoginPassword ? <Eye size={20} color="#999" /> : <EyeOff size={20} color="#999" />
                   )}
                 </TouchableOpacity>
               </View>
@@ -1178,7 +1321,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
             <Text style={styles.inputLabel}>CONFIRM PASSWORD</Text>
             <View style={styles.passwordInputWrapper}>
               <TextInput
-                style={[styles.authInput, errors.confirmPassword && styles.inputErrorBorder, { flex: 1 }]}
+                style={[styles.authInput, errors.confirmPassword && styles.inputErrorBorder, { flex: 1, color: '#1a1a1a' }]}
                 onChangeText={(val) => { 
                   setSignupForm({ ...signupForm, confirmPassword: val }); 
                   handleFieldValidation('confirmPassword', val, 'signup');
@@ -1192,7 +1335,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
                 onPress={() => setShowSignupConfirmPassword(!showSignupConfirmPassword)}
                 style={styles.eyeIcon}
               >
-                {showSignupConfirmPassword ? <EyeOff size={20} color="#999" /> : <Eye size={20} color="#999" />}
+                {showSignupConfirmPassword ? <Eye size={20} color="#999" /> : <EyeOff size={20} color="#999" />}
               </TouchableOpacity>
             </View>
             {errors.confirmPassword && <Text style={styles.warningText}>{errors.confirmPassword}</Text>}
@@ -1345,7 +1488,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
               <Text style={styles.inputLabel}>NEW PASSWORD</Text>
               <View style={styles.passwordInputWrapper}>
                 <TextInput
-                  style={[styles.authInput, errors.newPassword && styles.inputErrorBorder, { flex: 1 }]}
+                  style={[styles.authInput, errors.newPassword && styles.inputErrorBorder, { flex: 1, color: '#1a1a1a' }]}
                   onChangeText={(val) => {
                     setForgotPasswordForm({ ...forgotPasswordForm, newPassword: val });
                   }}
@@ -1358,7 +1501,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
                   onPress={() => setShowForgotNewPassword(!showForgotNewPassword)}
                   style={styles.eyeIcon}
                 >
-                  {showForgotNewPassword ? <EyeOff size={20} color="#999" /> : <Eye size={20} color="#999" />}
+                  {showForgotNewPassword ? <Eye size={20} color="#999" /> : <EyeOff size={20} color="#999" />}
                 </TouchableOpacity>
               </View>
               {/* Password checklist for forgot password */}
@@ -1390,7 +1533,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
               <Text style={styles.inputLabel}>CONFIRM PASSWORD</Text>
               <View style={styles.passwordInputWrapper}>
                 <TextInput
-                  style={[styles.authInput, errors.confirmPassword && styles.inputErrorBorder, { flex: 1 }]}
+                  style={[styles.authInput, errors.confirmPassword && styles.inputErrorBorder, { flex: 1, color: '#1a1a1a' }]}
                   onChangeText={(val) => {
                     setForgotPasswordForm({ ...forgotPasswordForm, confirmPassword: val });
                   }}
@@ -1403,7 +1546,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
                   onPress={() => setShowForgotConfirmPassword(!showForgotConfirmPassword)}
                   style={styles.eyeIcon}
                 >
-                  {showForgotConfirmPassword ? <EyeOff size={20} color="#999" /> : <Eye size={20} color="#999" />}
+                  {showForgotConfirmPassword ? <Eye size={20} color="#999" /> : <EyeOff size={20} color="#999" />}
                 </TouchableOpacity>
               </View>
               {errors.confirmPassword && <Text style={styles.warningText}>{errors.confirmPassword}</Text>}
@@ -1467,13 +1610,101 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         )}
       </View>
     </View>
+        </ScrollView>
+      </View>
+    </TouchableWithoutFeedback>
+  </KeyboardAvoidingView>
+</Modal>
+
+{/* TERMS AND CONDITIONS MODAL */}
+<Modal visible={showTermsModal} animationType="fade" transparent={true}>
+  <View style={styles.termsOverlay}>
+    <View style={styles.termsCard}>
+      <TouchableOpacity
+        style={styles.authClose}
+        onPress={handleRefuseTerms}
+      >
+        <X color="#333" size={20} />
+      </TouchableOpacity>
+
+      <Text style={styles.authTitle}>Terms & Conditions</Text>
+      <Text style={styles.authSub}>
+        Please read and accept these terms before continuing with account creation.
+      </Text>
+
+      <ScrollView
+        style={styles.termsScrollBox}
+        onScroll={handleTermsScroll}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={true}
+      >
+        <Text style={styles.termsIntro}>
+          Welcome to Hannah Vanessa Boutique. By creating an account and using our website, you agree to comply with and be bound by the following Terms and Conditions. Please read them carefully before registering.
+        </Text>
+
+        {accountTermsSections.map((section) => (
+          <View key={section.title} style={styles.termsSection}>
+            <Text style={styles.termsSectionTitle}>{section.title}</Text>
+            {section.body.map((line) => (
+              <Text key={line} style={styles.termsBodyText}>{line}</Text>
+            ))}
+          </View>
+        ))}
+      </ScrollView>
+
+      {!hasScrolledTermsToBottom && (
+        <Text style={styles.termsScrollHint}>
+          Scroll to the bottom of the terms to continue.
+        </Text>
+      )}
+
+      <TouchableOpacity
+        style={styles.termsCheckboxRow}
+        disabled={!hasScrolledTermsToBottom}
+        onPress={() => setHasAcceptedTerms((prev) => !prev)}
+      >
+        <View style={[styles.termsCheckbox, hasAcceptedTerms && styles.termsCheckboxChecked]}>
+          {hasAcceptedTerms && <Text style={styles.termsCheckMark}>✓</Text>}
+        </View>
+        <Text style={styles.termsCheckboxLabel}>
+          I agree to the terms, conditions, and policies stated above
+        </Text>
+      </TouchableOpacity>
+
+      <View style={styles.termsButtonRow}>
+        <TouchableOpacity style={styles.termsRefuseBtn} onPress={handleRefuseTerms}>
+          <Text style={styles.termsRefuseText}>Refuse</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.termsContinueBtn, !hasAcceptedTerms && styles.authSubmitBtnDisabled]}
+          disabled={!hasAcceptedTerms}
+          onPress={handleContinueTerms}
+        >
+          <Text style={styles.authSubmitText}>Continue</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   </View>
 </Modal>
 
 {/* FORGOT PASSWORD MODAL (SEPARATE FROM LOGIN) */}
 <Modal visible={showForgotPasswordModal} animationType="fade" transparent={true}>
-  <View style={styles.authOverlay}>
-    <View style={styles.authCard}>
+  <KeyboardAvoidingView
+    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    style={{ flex: 1 }}
+  >
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={styles.authOverlay}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.authCard}>
       <TouchableOpacity style={styles.authClose} onPress={() => {
         setShowForgotPasswordModal(false);
         setForgotPasswordForm({ email: '', code: '', newPassword: '', confirmPassword: '', step: 'email' });
@@ -1617,7 +1848,10 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         </TouchableOpacity>
       </View>
     </View>
-  </View>
+        </ScrollView>
+      </View>
+    </TouchableWithoutFeedback>
+  </KeyboardAvoidingView>
 </Modal>
 
 {/* SUCCESS MODAL - PASSWORD RESET */}
@@ -1777,7 +2011,7 @@ legalText: {
   nameCol: { flex: 1 },
   inputGroup: { marginBottom: 20 },
   inputLabel: { fontSize: 10, fontWeight: 'bold', color: '#333', marginBottom: 8 },
-  authInput: { height: 45, borderWidth: 1, borderColor: '#D1CDC7', paddingHorizontal: 15, backgroundColor: '#FFF', paddingRight: 45 },
+  authInput: { height: 45, borderWidth: 1, borderColor: '#D1CDC7', paddingHorizontal: 15, backgroundColor: '#FFF', paddingRight: 45, color: '#1a1a1a' },
   passwordInputWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#D1CDC7', backgroundColor: '#FFF' },
   eyeIcon: { position: 'absolute', right: 15, padding: 5, justifyContent: 'center', alignItems: 'center' },
   passwordChecklistContainer: { marginTop: 8, paddingVertical: 8, paddingHorizontal: 10, backgroundColor: '#F8F8F8', borderRadius: 6 },
@@ -1926,4 +2160,21 @@ successSplash: {
   zIndex: 1000,
 },
   // (removed visual checklist styles)
+  termsOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  termsCard: { width: '90%', maxHeight: '85%', backgroundColor: '#FAF7F0', padding: 25, borderRadius: 2 },
+  termsScrollBox: { maxHeight: 320, marginTop: 15, marginBottom: 10, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#D1CDC7', padding: 15 },
+  termsIntro: { fontSize: 12, color: '#3D2B1F', lineHeight: 18, marginBottom: 15 },
+  termsSection: { marginBottom: 16 },
+  termsSectionTitle: { fontSize: 12, fontWeight: 'bold', color: '#1a1a1a', marginBottom: 6, textTransform: 'uppercase' },
+  termsBodyText: { fontSize: 11, color: '#3D2B1F', lineHeight: 17, marginBottom: 4 },
+  termsScrollHint: { fontSize: 10, color: '#6B5D4F', marginBottom: 8 },
+  termsCheckboxRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 15 },
+  termsCheckbox: { width: 18, height: 18, borderWidth: 1, borderColor: '#6B5D4F', justifyContent: 'center', alignItems: 'center', marginTop: 1 },
+  termsCheckboxChecked: { backgroundColor: '#1a1a1a', borderColor: '#1a1a1a' },
+  termsCheckMark: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+  termsCheckboxLabel: { flex: 1, fontSize: 11, color: '#3D2B1F', lineHeight: 16 },
+  termsButtonRow: { flexDirection: 'row', gap: 10 },
+  termsRefuseBtn: { flex: 1, height: 45, borderWidth: 1, borderColor: '#D1CDC7', justifyContent: 'center', alignItems: 'center' },
+  termsRefuseText: { color: '#4B433A', fontSize: 13, fontWeight: '600' },
+  termsContinueBtn: { flex: 1, height: 45, backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center' },
 });

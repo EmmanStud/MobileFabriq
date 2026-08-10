@@ -45,6 +45,25 @@ export default function ChatModal({ visible, onClose }) {
     }
   }, [messages]);
 
+  useEffect(() => {
+    const onKeyboardShow = () => {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 150);
+    };
+    const onKeyboardHide = () => {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    };
+    const showSub = Keyboard.addListener('keyboardDidShow', onKeyboardShow);
+    const hideSub = Keyboard.addListener('keyboardDidHide', onKeyboardHide);
+    return () => {
+      showSub?.remove?.();
+      hideSub?.remove?.();
+    };
+  }, []);
+
   const formatTime = (date) => {
     const d = date instanceof Date ? date : new Date(date);
     const h = String(d.getHours()).padStart(2, '0');
@@ -179,8 +198,8 @@ export default function ChatModal({ visible, onClose }) {
         <SafeAreaView style={styles.safeArea}>
           <KeyboardAvoidingView
             style={styles.keyboardView}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
           >
             <View style={styles.container}>
 
@@ -260,21 +279,21 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   safeArea: {
-    flex: 0,
+    flex: 1,
     maxHeight: '85%',
   },
   keyboardView: {
-    flex: 0,
+    flex: 1,
   },
   container: {
     backgroundColor: '#FFFDF9',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: 600,
     minHeight: 400,
     borderWidth: 1,
     borderColor: '#E8DCC8',
     overflow: 'hidden',
+    flex: 1,
   },
 
   // Header

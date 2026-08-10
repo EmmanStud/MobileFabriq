@@ -494,9 +494,9 @@ export default function EditProfileModal({
                       disabled={isLoading}
                     >
                       {showOldPassword ? (
-                        <EyeOff size={18} color="#6B5D4F" />
-                      ) : (
                         <Eye size={18} color="#6B5D4F" />
+                      ) : (
+                        <EyeOff size={18} color="#6B5D4F" />
                       )}
                     </TouchableOpacity>
                   </View>
@@ -561,9 +561,9 @@ export default function EditProfileModal({
                       disabled={isLoading}
                     >
                       {showNewPassword ? (
-                        <EyeOff size={18} color="#6B5D4F" />
-                      ) : (
                         <Eye size={18} color="#6B5D4F" />
+                      ) : (
+                        <EyeOff size={18} color="#6B5D4F" />
                       )}
                     </TouchableOpacity>
                   </View>
@@ -621,9 +621,9 @@ export default function EditProfileModal({
                       disabled={isLoading}
                     >
                       {showConfirmPassword ? (
-                        <EyeOff size={18} color="#6B5D4F" />
-                      ) : (
                         <Eye size={18} color="#6B5D4F" />
+                      ) : (
+                        <EyeOff size={18} color="#6B5D4F" />
                       )}
                     </TouchableOpacity>
                   </View>
