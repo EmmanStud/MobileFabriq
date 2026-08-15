@@ -120,6 +120,14 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
             hasImage: !!imageSource,
             description: item.description || '',
             rating: item.rating ?? 0,
+            ratings: Array.isArray(item.ratings)
+                ? item.ratings.map((r) => ({
+                    reviewerName: r.reviewerName,
+                    score: r.score,
+                    comment: r.comment,
+                    createdAt: r.createdAt,
+                }))
+                : [],
             stock: item.stock || 1,
             lastRented: item.lastRented,
         };
@@ -170,6 +178,33 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
         })();
         return () => (mounted = false);
     }, []);
+
+    // If another screen navigates here with a selectedGownId or selectedGown param,
+    // open the existing gown details modal for that gown after gowns have loaded.
+    useEffect(() => {
+        try {
+            const params = route?.params || {};
+            const paramId = params.selectedGownId ?? (params.selectedGown && (typeof params.selectedGown === 'string' ? params.selectedGown : params.selectedGown.id));
+            if (!paramId && !params.selectedGown) return;
+            if (gowns && gowns.length > 0) {
+                const match = gowns.find(g => String(g.id) === String(paramId));
+                if (match) {
+                    setSelectedGown(match);
+                    // clear params so reopening doesn't happen repeatedly
+                    try { navigation.setParams({ selectedGownId: undefined, selectedGown: undefined }); } catch (_) {}
+                    return;
+                }
+                // If the caller passed a full gown object (e.g. favorites item), map it
+                if (params.selectedGown && typeof params.selectedGown === 'object') {
+                    const mapped = toCatalogGown(params.selectedGown, 0);
+                    setSelectedGown(mapped);
+                    try { navigation.setParams({ selectedGownId: undefined, selectedGown: undefined }); } catch (_) {}
+                }
+            }
+        } catch (err) {
+            console.warn('Error handling incoming selectedGown param:', err);
+        }
+    }, [gowns, route?.params?.selectedGownId, route?.params?.selectedGown]);
 
 
 
@@ -478,6 +513,31 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
                                     {/* Divider */}
                                     <View style={styles.divider} />
 
+                                    {/* Reviews (read-only) */}
+                                    <View style={styles.reviewsContainer}>
+                                        <Text style={styles.reviewsHeader}>Customer Reviews</Text>
+                                        {Array.isArray(selectedGown.ratings) && selectedGown.ratings.length > 0 ? (
+                                            selectedGown.ratings.map((entry, idx) => {
+                                                const date = entry?.createdAt ? (() => {
+                                                    try { return new Date(entry.createdAt).toLocaleDateString(); } catch { return String(entry.createdAt); }
+                                                })() : 'Recent';
+
+                                                return (
+                                                    <View key={`${entry.reviewerName || 'anon'}-${idx}`} style={styles.reviewItem}>
+                                                        <View style={styles.reviewHeader}>
+                                                            <Text style={styles.reviewAuthor}>{entry.reviewerName || 'Anonymous'}</Text>
+                                                            <Text style={styles.reviewScore}>{entry.score ?? 0} ★</Text>
+                                                        </View>
+                                                        <Text style={styles.reviewDate}>{date}</Text>
+                                                        <Text style={styles.reviewComment}>{entry.comment || ''}</Text>
+                                                    </View>
+                                                );
+                                            })
+                                        ) : (
+                                            <Text style={styles.noReviewsText}>No customer reviews yet.</Text>
+                                        )}
+                                    </View>
+
                                     {/* Details Grid */}
                                     <View style={styles.detailsGrid}>
                                         {/* Color */}
@@ -716,4 +776,13 @@ const styles = StyleSheet.create({
     legalText: { fontSize: 11, color: 'rgba(255,255,255,0.5)' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FAF7F0' },
     loadingText: { marginTop: 12, fontSize: 14, color: '#6B5D4F', fontFamily: 'serif' },
+    reviewsContainer: { marginTop: 12, gap: 8 },
+    reviewsHeader: { fontSize: 16, fontWeight: '700', marginBottom: 8, color: '#1a1a1a' },
+    reviewItem: { marginBottom: 12, padding: 10, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#E8DCC8' },
+    reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+    reviewAuthor: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
+    reviewScore: { fontSize: 13, color: '#D4AF37', fontWeight: '700' },
+    reviewDate: { fontSize: 12, color: '#6B5D4F', marginBottom: 6 },
+    reviewComment: { fontSize: 13, color: '#6B5D4F' },
+    noReviewsText: { fontSize: 13, color: '#6B5D4F' },
 });

@@ -198,7 +198,7 @@ export default function ChatModal({ visible, onClose }) {
         <SafeAreaView style={styles.safeArea}>
           <KeyboardAvoidingView
             style={styles.keyboardView}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
           >
             <View style={styles.container}>
@@ -223,6 +223,8 @@ export default function ChatModal({ visible, onClose }) {
                 keyExtractor={(item) => item.id}
                 renderItem={renderMessage}
                 contentContainerStyle={styles.messagesList}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                 showsVerticalScrollIndicator={false}
                 onContentSizeChange={() =>
                   flatListRef.current?.scrollToEnd({ animated: true })

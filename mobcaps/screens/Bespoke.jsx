@@ -173,6 +173,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [lastAnalysisId, setLastAnalysisId] = useState(null);
+  const [showAIModal, setShowAIModal] = useState(false);
 
   // Camera State
   const [permission, requestPermission] = useCameraPermissions();
@@ -298,7 +299,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
     return topMatches;
   };
 
-  const applyAIRecommendation = () => {
+  const applyAIRecommendation = async () => {
     if (!skinAnalysis || !skinAnalysis.recommendedColors) return;
     
     // Auto-fill preferred colors
@@ -314,46 +315,43 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       });
     }
 
-    // Track applied recommendation in DB
-    if (lastAnalysisId) {
-      (async () => {
-        try {
-          const token = await sessionService.getSession().then(s => s?.token);
-          if (token) {
-            const response = await fetch(
-              `${API_CONFIG.BASE_URL}/skin-analysis/${lastAnalysisId}/applied`,
-              {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                  selectedColor: formData.preferredColors || null,
-                }),
-              }
-            );
-
-            if (!response.ok) {
-              const errText = await response.text();
-              console.error('updateSkinAnalysisApplied failed:', response.status, errText);
-            } else {
-              console.log('[AI] Analysis marked as applied in color_anal:', lastAnalysisId);
-            }
-          }
-        } catch (err) {
-          console.error('updateSkinAnalysisApplied error:', err);
-        }
-      })();
-    }
-
     showAlert('Recommendation Applied', 'Preferred colors updated and AI-matched gowns highlighted.');
+
+    // Track applied in color_anal collection
+    if (lastAnalysisId) {
+      try {
+        const session = await sessionService.getSession();
+        const token = session?.token || authToken;
+        if (token) {
+          await fetch(
+            `${API_CONFIG.BASE_URL}/skin-analysis/${lastAnalysisId}/applied`,
+            {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                selectedColor: formData?.preferredColors || null,
+              }),
+            }
+          );
+          console.log('[AI] ✅ Marked as applied in color_anal');
+        }
+      } catch (err) {
+        // Fail silently
+      }
+    }
   };
 
   const saveSkinAnalysisToDb = async (analysis, gowns) => {
     try {
-      const token = await sessionService.getSession().then(s => s?.token);
-      if (!token || !analysis) return;
+      const session = await sessionService.getSession();
+      const token = session?.token || authToken;
+      if (!token || !analysis) {
+        console.log('[AI] No token — skipping DB save');
+        return;
+      }
 
       const body = {
         skinTone: analysis.tone,
@@ -361,13 +359,15 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         skinHex: analysis.hex,
         skinRgb: analysis.rgb,
         recommendedColors: analysis.recommendedColors || [],
-        recommendedGownIds: gowns
-          .map(g => g._id || g.id)
-          .filter(id => id && typeof id === 'string' && id.length === 24)
+        recommendedGownIds: (gowns || [])
+          .filter(g => g._id || g.id)
+          .map(g => String(g._id || g.id))
           .slice(0, 12),
-        insightText: analysis.insight || null,
-        branch: formData.branch || null,
+        insightText: `${analysis.tone} skin with ${analysis.undertone} undertone. Best colors: ${(analysis.recommendedColors || []).slice(0, 3).join(', ')}`,
+        branch: formData?.branch || null,
       };
+
+      console.log('[AI] Saving to color_anal:', body.skinTone, body.undertone);
 
       const response = await fetch(
         `${API_CONFIG.BASE_URL}/skin-analysis/save`,
@@ -381,16 +381,17 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         }
       );
 
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error('saveSkinAnalysisToDb failed:', response.status, errText);
-        return;
-      }
       const data = await response.json();
-      setLastAnalysisId(data.analysisId);
-      console.log('[AI] Skin analysis saved to color_anal:', data.analysisId);
+
+      if (response.ok) {
+        setLastAnalysisId(data.analysisId);
+        console.log('[AI] ✅ Saved to color_anal:', data.analysisId);
+      } else {
+        console.warn('[AI] ❌ Save failed:', response.status, data?.message);
+      }
     } catch (err) {
-      console.error('saveSkinAnalysisToDb error:', err);
+      console.warn('[AI] saveSkinAnalysisToDb error:', err.message);
+      // Fail silently — never block the user
     }
   };
 
@@ -460,27 +461,58 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       const derivedHex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
       const recommendedColors = getRecommendedColors(tone, undertone);
 
-      setSkinAnalysis({
+      const analysisResult = {
         tone,
         undertone,
         rgb: { r, g, b },
         hex: derivedHex,
         recommendedColors,
         insight: getAIInsight(tone, undertone),
-      });
+      };
+
+      setSkinAnalysis(analysisResult);
+
+      if (recommendedColors.length > 0) {
+        setFormData(prev => ({ ...prev, preferredColors: recommendedColors[0] }));
+      }
 
       const filtered = filterRecommendedGowns(allGowns, recommendedColors);
       setRecommendedGowns(filtered);
 
-      // Save to DB silently
-      const analysisObj = {
-        tone, undertone,
-        rgb: { r, g, b },
-        hex: derivedHex,
-        recommendedColors,
-        insight: getAIInsight(tone, undertone),
-      };
-      saveSkinAnalysisToDb(analysisObj, filtered);
+      // Save to color_anal collection — non-blocking
+      saveSkinAnalysisToDb(analysisResult, filtered);
+
+      // TEMP DEBUG — test if backend route exists
+      try {
+        const session = await sessionService.getSession();
+        const token = session?.token || authToken;
+        console.log('[DEBUG] Token exists:', !!token);
+        console.log('[DEBUG] API URL:', API_CONFIG.BASE_URL);
+
+        const testRes = await fetch(`${API_CONFIG.BASE_URL}/skin-analysis/save`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            skinTone: 'medium',
+            undertone: 'warm',
+            skinHex: '#C68642',
+            skinRgb: { r: 198, g: 134, b: 66 },
+            recommendedColors: ['Gold', 'Copper'],
+            recommendedGownIds: [],
+            insightText: 'Test',
+            branch: 'Taguig Main',
+          }),
+        });
+
+        console.log('[DEBUG] Response status:', testRes.status);
+        const testData = await testRes.json();
+        console.log('[DEBUG] Response data:', JSON.stringify(testData));
+      } catch (e) {
+        console.log('[DEBUG] Fetch error:', e.message);
+      }
 
     } catch (err) {
       console.error('analyzeSkinTone error:', err);
@@ -1720,273 +1752,6 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
                   />
                 </View>
 
-                {/* AI Color Recommendation - EXACTLY AS IS */}
-<View style={styles.aiBox}>
-
-  {/* ── Header Row ── */}
-  <View style={styles.aiHeader}>
-    <View style={styles.aiIconBadge}>
-      <Palette size={22} color="#D4AF37" />
-    </View>
-    <View style={{ flex: 1 }}>
-      <Text style={styles.aiTitle}>AI Skin Tone Advisor</Text>
-      <Text style={styles.aiDescription}>
-        Scan your skin for a personalized gown color palette
-      </Text>
-    </View>
-  </View>
-
-  {/* ── Scan Button ── */}
-  <TouchableOpacity
-    style={[styles.aiScanBtn, isAnalyzing && styles.aiButtonDisabled]}
-    onPress={handleOpenCamera}
-    disabled={isAnalyzing}
-    activeOpacity={0.85}
-  >
-    <CameraIcon size={18} color={capturedImage ? '#6B5D4F' : '#fff'} />
-    <Text style={[styles.aiScanBtnText, capturedImage && { color: '#6B5D4F' }]}>
-      {isAnalyzing ? 'Analyzing...' : capturedImage ? 'Retake Photo' : 'Scan My Skin Tone'}
-    </Text>
-  </TouchableOpacity>
-
-  {/* ── Captured Photo + Analysis ── */}
-  {capturedImage && (
-    <View style={styles.aiResultCard}>
-
-      {/* Photo - full width tall */}
-      <View style={styles.aiPhotoWrapper}>
-        <Image source={{ uri: capturedImage }} style={styles.aiPhoto} />
-
-        {/* Analyzing overlay */}
-        {isAnalyzing && (
-          <View style={styles.aiAnalyzingOverlay}>
-            <ActivityIndicator color="#D4AF37" size="large" />
-            <Text style={styles.aiAnalyzingText}>Analyzing your skin tone...</Text>
-            <Text style={styles.aiAnalyzingSubText}>Detecting cheek undertone</Text>
-          </View>
-        )}
-
-        {/* Remove button */}
-        <TouchableOpacity
-          style={styles.aiRemoveBtn}
-          onPress={() => {
-            setCapturedImage(null);
-            setSkinAnalysis(null);
-            setRecommendedGowns([]);
-          }}
-        >
-          <X size={14} color="#fff" />
-        </TouchableOpacity>
-
-        {/* Skin tone badge overlay on photo */}
-        {skinAnalysis && !isAnalyzing && (
-          <View style={styles.aiPhotoBadge}>
-            <View style={[styles.aiSkinDot, { backgroundColor: skinAnalysis.hex }]} />
-            <Text style={styles.aiPhotoBadgeText}>
-              {skinAnalysis.tone.charAt(0).toUpperCase() + skinAnalysis.tone.slice(1)}-
-              {skinAnalysis.undertone.charAt(0).toUpperCase() + skinAnalysis.undertone.slice(1)}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* Analysis Results */}
-      {skinAnalysis && !isAnalyzing && (
-        <View style={styles.aiAnalysisResults}>
-
-          {/* Tone + Undertone Row */}
-          <View style={styles.aiToneRow}>
-            <View style={styles.aiToneItem}>
-              <Text style={styles.aiToneLabel}>SKIN TONE</Text>
-              <Text style={styles.aiToneValue}>
-                {skinAnalysis.tone.charAt(0).toUpperCase() + skinAnalysis.tone.slice(1)}
-              </Text>
-            </View>
-            <View style={styles.aiToneDivider} />
-            <View style={styles.aiToneItem}>
-              <Text style={styles.aiToneLabel}>UNDERTONE</Text>
-              <Text style={styles.aiToneValue}>
-                {skinAnalysis.undertone.charAt(0).toUpperCase() + skinAnalysis.undertone.slice(1)}
-              </Text>
-            </View>
-            <View style={styles.aiToneDivider} />
-            <View style={styles.aiToneItem}>
-              <Text style={styles.aiToneLabel}>SKIN HEX</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                <View style={[styles.aiToneHexDot, { backgroundColor: skinAnalysis.hex }]} />
-                <Text style={styles.aiToneHexText}>{skinAnalysis.hex}</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Tone Spectrum Bar */}
-          <View style={styles.aiSpectrumWrapper}>
-            <Text style={styles.aiSpectrumLabel}>TONE SPECTRUM</Text>
-            <View style={styles.aiSpectrumTrack}>
-              <View style={styles.aiSpectrumGradient} />
-              <View style={[
-                styles.aiSpectrumIndicator,
-                {
-                  left: `${
-                    skinAnalysis.tone === 'fair' ? 5 :
-                    skinAnalysis.tone === 'light' ? 25 :
-                    skinAnalysis.tone === 'medium' ? 48 :
-                    skinAnalysis.tone === 'tan' ? 70 : 90
-                  }%`
-                }
-              ]} />
-            </View>
-            <View style={styles.aiSpectrumLabels}>
-              {['Fair','Light','Medium','Tan','Deep'].map(t => (
-                <Text
-                  key={t}
-                  style={[
-                    styles.aiSpectrumTick,
-                    skinAnalysis.tone === t.toLowerCase() && styles.aiSpectrumTickActive
-                  ]}
-                >{t}</Text>
-              ))}
-            </View>
-          </View>
-
-          {/* AI Insight Card */}
-          <View style={styles.aiInsightBox}>
-            <View style={styles.aiInsightHeader}>
-              <Sparkles size={14} color="#D4AF37" />
-              <Text style={styles.aiInsightTitle}>AI Stylist Insight</Text>
-            </View>
-            <Text style={styles.aiInsightText}>{skinAnalysis.insight}</Text>
-          </View>
-
-          {/* Color Palette */}
-          <View style={styles.aiPaletteSection}>
-            <Text style={styles.aiPaletteTitle}>YOUR COLOR PALETTE</Text>
-            <Text style={styles.aiPaletteSub}>Tap any color to apply it to your order</Text>
-            <View style={styles.aiPaletteGrid}>
-              {skinAnalysis.recommendedColors.map((color, idx) => {
-                const hex = COLOR_HEX_MAP[color] || '#E8DCC8';
-                const isFirst = idx === 0;
-                return (
-                  <TouchableOpacity
-                    key={idx}
-                    style={[styles.aiPaletteChip, isFirst && styles.aiPaletteChipTop]}
-                    onPress={() => setFormData(prev => ({ ...prev, preferredColors: color }))}
-                    activeOpacity={0.8}
-                  >
-                    <View style={[styles.aiPaletteColor, { backgroundColor: hex }]}>
-                      {isFirst && (
-                        <View style={styles.aiPaletteBestBadge}>
-                          <Text style={styles.aiPaletteBestText}>✦ BEST</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={styles.aiPaletteColorName} numberOfLines={1}>{color}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Apply Button */}
-          <TouchableOpacity
-            style={styles.aiApplyBtn}
-            onPress={applyAIRecommendation}
-            activeOpacity={0.85}
-          >
-            <Sparkles size={16} color="#1a1a1a" />
-            <Text style={styles.aiApplyBtnText}>Apply AI Recommendation to Order</Text>
-          </TouchableOpacity>
-
-        </View>
-      )}
-    </View>
-  )}
-
-  {/* ── Recommended Gowns ── */}
-  {skinAnalysis && !isAnalyzing && (
-    <View ref={recommendationRef} style={styles.aiGownsSection}>
-      <View style={styles.aiGownsHeader}>
-        <View>
-          <Text style={styles.aiGownsTitle}>Recommended For You</Text>
-          <Text style={styles.aiGownsSub}>
-            {recommendedGowns.length} gowns matched to your {skinAnalysis.tone} {skinAnalysis.undertone} tone
-          </Text>
-        </View>
-        <TouchableOpacity onPress={() => navigation.navigate('Collection')}>
-          <Text style={styles.aiGownsSeeAll}>See All</Text>
-        </TouchableOpacity>
-      </View>
-
-      {recommendedGowns.length > 0 ? (
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={recommendedGowns}
-          keyExtractor={(item) => String(item.id || item._id)}
-          contentContainerStyle={{ paddingRight: 8 }}
-          renderItem={({ item, index }) => (
-            <TouchableOpacity
-              style={styles.aiGownCard}
-              onPress={() => navigation.navigate('Collection', { selectedGownId: item.id })}
-              activeOpacity={0.85}
-            >
-              {/* Match badge on top 2 */}
-              {index < 2 && (
-                <View style={styles.aiGownMatchBadge}>
-                  <Text style={styles.aiGownMatchBadgeText}>✦ TOP MATCH</Text>
-                </View>
-              )}
-
-              {/* Gown Image */}
-              <View style={styles.aiGownImageBox}>
-                {item.image ? (
-                  <Image
-                    source={{ uri: item.image.startsWith('http') ? item.image : `${API_CONFIG.BASE_URL}${item.image}` }}
-                    style={styles.aiGownImage}
-                  />
-                ) : (
-                  <View style={[styles.aiGownImage, { backgroundColor: '#F5F1E8', justifyContent: 'center', alignItems: 'center' }]}>
-                    <ShoppingBag size={28} color="#D4AF37" />
-                  </View>
-                )}
-              </View>
-
-              {/* Gown Info */}
-              <View style={styles.aiGownInfo}>
-                <Text style={styles.aiGownName} numberOfLines={2}>{item.name}</Text>
-                <Text style={styles.aiGownCategory}>{item.category}</Text>
-
-                {/* Color chip */}
-                <View style={styles.aiGownColorRow}>
-                  <View style={[styles.aiGownColorDot, { backgroundColor: COLOR_HEX_MAP[item.color] || item.color?.toLowerCase() || '#E8DCC8' }]} />
-                  <Text style={styles.aiGownColorLabel}>{item.color}</Text>
-                </View>
-
-                {/* Match % bar */}
-                <View style={styles.aiGownMatchRow}>
-                  <View style={styles.aiGownMatchTrack}>
-                    <View style={[styles.aiGownMatchFill, { width: `${item.matchPct || 70}%` }]} />
-                  </View>
-                  <Text style={styles.aiGownMatchPct}>{item.matchPct || 70}%</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          )}
-        />
-      ) : (
-        <View style={styles.aiNoMatch}>
-          <Text style={styles.aiNoMatchText}>No exact matches in current inventory.</Text>
-          <TouchableOpacity style={styles.aiNoMatchBtn} onPress={() => navigation.navigate('Collection')}>
-            <Text style={styles.aiNoMatchBtnText}>Browse All Collections</Text>
-            <ArrowRight size={14} color="#D4AF37" />
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  )}
-
-</View>
-
                 {/* What Happens Next Info Box */}
                 <View style={styles.infoBox}>
                   <Text style={styles.infoBoxTitle}>What Happens Next?</Text>
@@ -2756,6 +2521,309 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         </SafeAreaView> 
       </Modal>
 
+      {/* Floating AI Skin Tone Button */}
+      {activeTab === 'new' && (
+        <TouchableOpacity
+          style={styles.floatingAIBtn}
+          onPress={() => setShowAIModal(true)}
+          activeOpacity={0.85}
+        >
+          <Palette size={26} color="#fff" />
+        </TouchableOpacity>
+      )}
+
+      {/* AI Skin Tone Modal */}
+      <Modal
+        visible={showAIModal}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowAIModal(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#FAF7F0' }}>
+          {/* Modal Header */}
+          <View style={styles.aiModalHeader}>
+            <Text style={styles.aiModalTitle}>AI Skin Tone Advisor</Text>
+            <TouchableOpacity
+              style={styles.aiModalCloseBtn}
+              onPress={() => setShowAIModal(false)}
+            >
+              <X size={20} color="#1a1a1a" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.aiBox}>
+
+              {/* ── Header Row ── */}
+              <View style={styles.aiHeader}>
+                <View style={styles.aiIconBadge}>
+                  <Palette size={22} color="#D4AF37" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.aiTitle}>AI Skin Tone Advisor</Text>
+                  <Text style={styles.aiDescription}>
+                    Scan your skin for a personalized gown color palette
+                  </Text>
+                </View>
+              </View>
+
+              {/* ── Scan Button ── */}
+              <TouchableOpacity
+                style={[styles.aiScanBtn, isAnalyzing && styles.aiButtonDisabled]}
+                onPress={handleOpenCamera}
+                disabled={isAnalyzing}
+                activeOpacity={0.85}
+              >
+                <CameraIcon size={18} color={capturedImage ? '#6B5D4F' : '#fff'} />
+                <Text style={[styles.aiScanBtnText, capturedImage && { color: '#6B5D4F' }]}>
+                  {isAnalyzing ? 'Analyzing...' : capturedImage ? 'Retake Photo' : 'Scan My Skin Tone'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* ── Captured Photo + Analysis ── */}
+              {capturedImage && (
+                <View style={styles.aiResultCard}>
+
+                  {/* Photo - full width tall */}
+                  <View style={styles.aiPhotoWrapper}>
+                    <Image source={{ uri: capturedImage }} style={styles.aiPhoto} />
+
+                    {/* Analyzing overlay */}
+                    {isAnalyzing && (
+                      <View style={styles.aiAnalyzingOverlay}>
+                        <ActivityIndicator color="#D4AF37" size="large" />
+                        <Text style={styles.aiAnalyzingText}>Analyzing your skin tone...</Text>
+                        <Text style={styles.aiAnalyzingSubText}>Detecting cheek undertone</Text>
+                      </View>
+                    )}
+
+                    {/* Remove button */}
+                    <TouchableOpacity
+                      style={styles.aiRemoveBtn}
+                      onPress={() => {
+                        setCapturedImage(null);
+                        setSkinAnalysis(null);
+                        setRecommendedGowns([]);
+                      }}
+                    >
+                      <X size={14} color="#fff" />
+                    </TouchableOpacity>
+
+                    {/* Skin tone badge overlay on photo */}
+                    {skinAnalysis && !isAnalyzing && (
+                      <View style={styles.aiPhotoBadge}>
+                        <View style={[styles.aiSkinDot, { backgroundColor: skinAnalysis.hex }]} />
+                        <Text style={styles.aiPhotoBadgeText}>
+                          {skinAnalysis.tone.charAt(0).toUpperCase() + skinAnalysis.tone.slice(1)}-
+                          {skinAnalysis.undertone.charAt(0).toUpperCase() + skinAnalysis.undertone.slice(1)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Analysis Results */}
+                  {skinAnalysis && !isAnalyzing && (
+                    <View style={styles.aiAnalysisResults}>
+
+                      {/* Tone + Undertone Row */}
+                      <View style={styles.aiToneRow}>
+                        <View style={styles.aiToneItem}>
+                          <Text style={styles.aiToneLabel}>SKIN TONE</Text>
+                          <Text style={styles.aiToneValue}>
+                            {skinAnalysis.tone.charAt(0).toUpperCase() + skinAnalysis.tone.slice(1)}
+                          </Text>
+                        </View>
+                        <View style={styles.aiToneDivider} />
+                        <View style={styles.aiToneItem}>
+                          <Text style={styles.aiToneLabel}>UNDERTONE</Text>
+                          <Text style={styles.aiToneValue}>
+                            {skinAnalysis.undertone.charAt(0).toUpperCase() + skinAnalysis.undertone.slice(1)}
+                          </Text>
+                        </View>
+                        <View style={styles.aiToneDivider} />
+                        <View style={styles.aiToneItem}>
+                          <Text style={styles.aiToneLabel}>SKIN HEX</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                            <View style={[styles.aiToneHexDot, { backgroundColor: skinAnalysis.hex }]} />
+                            <Text style={styles.aiToneHexText}>{skinAnalysis.hex}</Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* Tone Spectrum Bar */}
+                      <View style={styles.aiSpectrumWrapper}>
+                        <Text style={styles.aiSpectrumLabel}>TONE SPECTRUM</Text>
+                        <View style={styles.aiSpectrumTrack}>
+                          <View style={styles.aiSpectrumGradient} />
+                          <View style={[
+                            styles.aiSpectrumIndicator,
+                            {
+                              left: `${
+                                skinAnalysis.tone === 'fair' ? 5 :
+                                skinAnalysis.tone === 'light' ? 25 :
+                                skinAnalysis.tone === 'medium' ? 48 :
+                                skinAnalysis.tone === 'tan' ? 70 : 90
+                              }%`
+                            }
+                          ]} />
+                        </View>
+                        <View style={styles.aiSpectrumLabels}>
+                          {['Fair','Light','Medium','Tan','Deep'].map(t => (
+                            <Text
+                              key={t}
+                              style={[
+                                styles.aiSpectrumTick,
+                                skinAnalysis.tone === t.toLowerCase() && styles.aiSpectrumTickActive
+                              ]}
+                            >{t}</Text>
+                          ))}
+                        </View>
+                      </View>
+
+                      {/* AI Insight Card */}
+                      <View style={styles.aiInsightBox}>
+                        <View style={styles.aiInsightHeader}>
+                          <Sparkles size={14} color="#D4AF37" />
+                          <Text style={styles.aiInsightTitle}>AI Stylist Insight</Text>
+                        </View>
+                        <Text style={styles.aiInsightText}>{skinAnalysis.insight}</Text>
+                      </View>
+
+                      {/* Color Palette */}
+                      <View style={styles.aiPaletteSection}>
+                        <Text style={styles.aiPaletteTitle}>YOUR COLOR PALETTE</Text>
+                        <Text style={styles.aiPaletteSub}>Tap any color to apply it to your order</Text>
+                        <View style={styles.aiPaletteGrid}>
+                          {skinAnalysis.recommendedColors.map((color, idx) => {
+                            const hex = COLOR_HEX_MAP[color] || '#E8DCC8';
+                            const isFirst = idx === 0;
+                            return (
+                              <TouchableOpacity
+                                key={idx}
+                                style={[styles.aiPaletteChip, isFirst && styles.aiPaletteChipTop]}
+                                onPress={() => setFormData(prev => ({ ...prev, preferredColors: color }))}
+                                activeOpacity={0.8}
+                              >
+                                <View style={[styles.aiPaletteColor, { backgroundColor: hex }]}>
+                                  {isFirst && (
+                                    <View style={styles.aiPaletteBestBadge}>
+                                      <Text style={styles.aiPaletteBestText}>✦ BEST</Text>
+                                    </View>
+                                  )}
+                                </View>
+                                <Text style={styles.aiPaletteColorName} numberOfLines={1}>{color}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </View>
+
+                      {/* Apply Button */}
+                      <TouchableOpacity
+                        style={styles.aiApplyBtn}
+                        onPress={applyAIRecommendation}
+                        activeOpacity={0.85}
+                      >
+                        <Sparkles size={16} color="#1a1a1a" />
+                        <Text style={styles.aiApplyBtnText}>Apply AI Recommendation to Order</Text>
+                      </TouchableOpacity>
+
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* ── Recommended Gowns ── */}
+              {skinAnalysis && !isAnalyzing && (
+                <View ref={recommendationRef} style={styles.aiGownsSection}>
+                  <View style={styles.aiGownsHeader}>
+                    <View>
+                      <Text style={styles.aiGownsTitle}>Recommended For You</Text>
+                      <Text style={styles.aiGownsSub}>
+                        {recommendedGowns.length} gowns matched to your {skinAnalysis.tone} {skinAnalysis.undertone} tone
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => navigation.navigate('Collection')}>
+                      <Text style={styles.aiGownsSeeAll}>See All</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {recommendedGowns.length > 0 ? (
+                    <FlatList
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      data={recommendedGowns}
+                      keyExtractor={(item) => String(item.id || item._id)}
+                      contentContainerStyle={{ paddingRight: 8 }}
+                      renderItem={({ item, index }) => (
+                        <TouchableOpacity
+                          style={styles.aiGownCard}
+                          onPress={() => navigation.navigate('Collection', { selectedGownId: item.id })}
+                          activeOpacity={0.85}
+                        >
+                          {/* Match badge on top 2 */}
+                          {index < 2 && (
+                            <View style={styles.aiGownMatchBadge}>
+                              <Text style={styles.aiGownMatchBadgeText}>✦ TOP MATCH</Text>
+                            </View>
+                          )}
+
+                          {/* Gown Image */}
+                          <View style={styles.aiGownImageBox}>
+                            {item.image ? (
+                              <Image
+                                source={{ uri: item.image.startsWith('http') ? item.image : `${API_CONFIG.BASE_URL}${item.image}` }}
+                                style={styles.aiGownImage}
+                              />
+                            ) : (
+                              <View style={[styles.aiGownImage, { backgroundColor: '#F5F1E8', justifyContent: 'center', alignItems: 'center' }]}>
+                                <ShoppingBag size={28} color="#D4AF37" />
+                              </View>
+                            )}
+                          </View>
+
+                          {/* Gown Info */}
+                          <View style={styles.aiGownInfo}>
+                            <Text style={styles.aiGownName} numberOfLines={2}>{item.name}</Text>
+                            <Text style={styles.aiGownCategory}>{item.category}</Text>
+
+                            {/* Color chip */}
+                            <View style={styles.aiGownColorRow}>
+                              <View style={[styles.aiGownColorDot, { backgroundColor: COLOR_HEX_MAP[item.color] || item.color?.toLowerCase() || '#E8DCC8' }]} />
+                              <Text style={styles.aiGownColorLabel}>{item.color}</Text>
+                            </View>
+
+                            {/* Match % bar */}
+                            <View style={styles.aiGownMatchRow}>
+                              <View style={styles.aiGownMatchTrack}>
+                                <View style={[styles.aiGownMatchFill, { width: `${item.matchPct || 70}%` }]} />
+                              </View>
+                              <Text style={styles.aiGownMatchPct}>{item.matchPct || 70}%</Text>
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      )}
+                    />
+                  ) : (
+                    <View style={styles.aiNoMatch}>
+                      <Text style={styles.aiNoMatchText}>No exact matches in current inventory.</Text>
+                      <TouchableOpacity style={styles.aiNoMatchBtn} onPress={() => navigation.navigate('Collection')}>
+                        <Text style={styles.aiNoMatchBtnText}>Browse All Collections</Text>
+                        <ArrowRight size={14} color="#D4AF37" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
+
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -3001,6 +3069,47 @@ const styles = StyleSheet.create({
   uploadSubText: {
     fontSize: 12,
     color: '#6B5D4F',
+  },
+  floatingAIBtn: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#D4AF37',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+    elevation: 10,
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+  },
+  aiModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8DCC8',
+  },
+  aiModalTitle: {
+    fontFamily: 'serif',
+    fontSize: 20,
+    color: '#1a1a1a',
+    fontWeight: '600',
+  },
+  aiModalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F5F1E8',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   // ── AI Recommendation Box ──
   aiBox: {

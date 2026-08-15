@@ -1113,18 +1113,17 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
 
       {/* AUTH MODAL */}
       <Modal visible={authMode !== null} animationType="fade" transparent={true}>
-  <KeyboardAvoidingView
-    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    style={{ flex: 1 }}
-  >
+  <View style={{ flex: 1 }}>
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.authOverlay}>
         <ScrollView
           showsVerticalScrollIndicator={false}
+          style={{ width: '100%' }}
           contentContainerStyle={{
             flexGrow: 1,
             justifyContent: 'center',
             alignItems: 'center',
+            width: '100%',
           }}
           keyboardShouldPersistTaps="handled"
         >
@@ -1613,7 +1612,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         </ScrollView>
       </View>
     </TouchableWithoutFeedback>
-  </KeyboardAvoidingView>
+  </View>
 </Modal>
 
 {/* TERMS AND CONDITIONS MODAL */}
@@ -1689,18 +1688,17 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
 
 {/* FORGOT PASSWORD MODAL (SEPARATE FROM LOGIN) */}
 <Modal visible={showForgotPasswordModal} animationType="fade" transparent={true}>
-  <KeyboardAvoidingView
-    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    style={{ flex: 1 }}
-  >
+  <View style={{ flex: 1 }}>
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.authOverlay}>
         <ScrollView
           showsVerticalScrollIndicator={false}
+          style={{ width: '100%' }}
           contentContainerStyle={{
             flexGrow: 1,
             justifyContent: 'center',
             alignItems: 'center',
+            width: '100%',
           }}
           keyboardShouldPersistTaps="handled"
         >
@@ -1851,7 +1849,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         </ScrollView>
       </View>
     </TouchableWithoutFeedback>
-  </KeyboardAvoidingView>
+  </View>
 </Modal>
 
 {/* SUCCESS MODAL - PASSWORD RESET */}
@@ -2001,8 +1999,15 @@ legalText: {
   fontSize: 9,
   color: 'rgba(255,255,255,0.5)',
 },
-  authOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  authCard: { width: '85%', backgroundColor: '#FAF7F0', padding: 30, borderRadius: 2 },
+  authOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12 },
+  authCard: {
+    width: '100%',
+    maxWidth: 460,
+    backgroundColor: '#FAF7F0',
+    padding: 28,
+    paddingHorizontal: 24,
+    borderRadius: 2,
+  },
   authClose: { position: 'absolute', top: 20, right: 20, width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: '#ddd', justifyContent: 'center', alignItems: 'center' },
   authTitle: { fontSize: 28, fontFamily: 'serif', textAlign: 'center', color: '#1a1a1a', marginTop: 20 },
   authSub: { fontSize: 12, color: '#6B5D4F', textAlign: 'center', marginVertical: 10 },

@@ -1182,9 +1182,15 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
                       </Text> 
                     </View> 
                     <View style={styles.favoriteActions}> 
+                      <TouchableOpacity
+                        style={styles.viewBtn}
+                        onPress={() => navigation.navigate('Collection', { selectedGownId: item.id })}
+                      >
+                        <Text style={styles.viewBtnText}>View</Text>
+                      </TouchableOpacity>
                       <TouchableOpacity style={styles.likeBtn} onPress={() => handleUnfavorite(item.id)}> 
                         <Heart size={18} color="#DC2626" fill="#DC2626" /> 
-                      </TouchableOpacity> 
+                      </TouchableOpacity>
                     </View> 
                   </View> 
                 )) 
