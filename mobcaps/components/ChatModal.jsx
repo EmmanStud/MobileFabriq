@@ -23,6 +23,7 @@ export default function ChatModal({ visible, onClose }) {
   const [conversationId, setConversationId] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
   const [guestToken, setGuestToken] = useState('');
+  const [inputHeight, setInputHeight] = useState(44);
   const flatListRef = useRef(null);
 
   useEffect(() => {
@@ -194,16 +195,15 @@ export default function ChatModal({ visible, onClose }) {
       transparent
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <SafeAreaView style={styles.safeArea}>
-          <KeyboardAvoidingView
-            style={styles.keyboardView}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
-          >
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        <View style={styles.overlay}>
+          <SafeAreaView style={styles.safeArea}>
             <View style={styles.container}>
 
-              {/* Header */}
               <View style={styles.header}>
                 <View>
                   <Text style={styles.headerTitle}>Chat with us</Text>
@@ -216,12 +216,12 @@ export default function ChatModal({ visible, onClose }) {
                 </TouchableOpacity>
               </View>
 
-              {/* Messages */}
               <FlatList
                 ref={flatListRef}
                 data={messages}
                 keyExtractor={(item) => item.id}
                 renderItem={renderMessage}
+                style={styles.messageList}
                 contentContainerStyle={styles.messagesList}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
@@ -231,7 +231,6 @@ export default function ChatModal({ visible, onClose }) {
                 }
               />
 
-              {/* Typing indicator */}
               {isSending && (
                 <View style={styles.typingRow}>
                   <View style={styles.typingBubble}>
@@ -241,17 +240,21 @@ export default function ChatModal({ visible, onClose }) {
                 </View>
               )}
 
-              {/* Input */}
               <View style={styles.inputRow}>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { height: Math.min(Math.max(inputHeight, 44), 96) }]}
                   value={inputText}
                   onChangeText={setInputText}
                   placeholder="Type your message..."
                   placeholderTextColor="#8A7763"
-                  multiline={false}
+                  multiline
                   returnKeyType="send"
                   onSubmitEditing={handleSend}
+                  onContentSizeChange={(event) => {
+                    const newHeight = event.nativeEvent.contentSize.height + 12;
+                    setInputHeight(Math.min(Math.max(newHeight, 44), 96));
+                  }}
+                  textAlignVertical="center"
                   editable={!isSending}
                 />
                 <TouchableOpacity
@@ -267,9 +270,9 @@ export default function ChatModal({ visible, onClose }) {
               </View>
 
             </View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </View>
+          </SafeAreaView>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -282,7 +285,7 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    maxHeight: '85%',
+    justifyContent: 'flex-end',
   },
   keyboardView: {
     flex: 1,
@@ -291,6 +294,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFDF9',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    maxHeight: '85%',
     minHeight: 400,
     borderWidth: 1,
     borderColor: '#E8DCC8',
@@ -332,6 +336,10 @@ const styles = StyleSheet.create({
   },
 
   // Messages
+  messageList: {
+    flex: 1,
+    backgroundColor: '#FAF7F0',
+  },
   messagesList: {
     padding: 16,
     gap: 10,
@@ -407,10 +415,11 @@ const styles = StyleSheet.create({
   // Input
   inputRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: 10,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
     borderTopWidth: 1,
     borderTopColor: '#EFE3D0',
     backgroundColor: '#FFFDF9',
@@ -423,7 +432,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
     color: '#1a1a1a',
-    maxHeight: 80,
+    minHeight: 44,
+    maxHeight: 96,
   },
   sendBtn: {
     width: 44,

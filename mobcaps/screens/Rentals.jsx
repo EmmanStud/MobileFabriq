@@ -12,7 +12,10 @@ import {
   Image,
   ActivityIndicator,
   RefreshControl,
+  AppState,
+  Linking,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { Calendar, MapPin, ShoppingBag, ChevronRight, Star } from 'lucide-react-native';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
@@ -20,7 +23,7 @@ import { sessionService } from '../services/sessionService';
 import { mongodbService } from '../services/mongodbService';
 import HamburgerMenu from '../components/HamburgerMenu';
 import Header from '../components/Header';
-import { showAlert } from '../services/platformService';
+import CustomAlertModal from '../components/CustomAlertModal';
 
 import RentalDetailsModal from '../components/RentalDetailsModal';
 
@@ -30,6 +33,8 @@ const branchOptions = [
   'Makati Branch',
   'Quezon City',
 ];
+
+const PENDING_PAYMONGO_KEY = 'mobcaps_pending_paymongo_payment';
 
 export default function Rentals({ navigation, route, unreadCount = 0 }) {
   // --- Rental Details Modal State ---
@@ -49,8 +54,24 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
     // Callback after receipt upload to refresh rentals
     const handleReceiptUploaded = async () => {
       const session = await sessionService.getSession();
-      if (session?.token) fetchUserRentals(session.token);
-      if (selectedRental) setSelectedRental(prev => ({ ...prev, status: 'paid_for_confirmation' }));
+      if (session?.token) await fetchUserRentals(session.token);
+    };
+
+    const persistPendingPaymongoPayment = async (rentalId, paymentLinkId) => {
+      if (!rentalId || !paymentLinkId) return;
+      try {
+        await AsyncStorage.setItem(PENDING_PAYMONGO_KEY, JSON.stringify({ rentalId, paymentLinkId }));
+      } catch (err) {
+        console.warn('Failed to persist pending PayMongo payment:', err);
+      }
+    };
+
+    const clearPendingPaymongoPayment = async () => {
+      try {
+        await AsyncStorage.removeItem(PENDING_PAYMONGO_KEY);
+      } catch (err) {
+        console.warn('Failed to clear pending PayMongo payment:', err);
+      }
     };
 
     const handleSubmitReview = async () => { 
@@ -113,6 +134,14 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
   const [formStep, setFormStep] = useState(1);
   const [validationErrors, setValidationErrors] = useState({});
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    mode: 'alert',
+    onConfirm: null,
+    onCancel: null,
+  });
   const [personalInfo, setPersonalInfo] = useState({
     fullName: '',
     email: '',
@@ -121,6 +150,52 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
 
   // Selected gown passed from Collection.jsx via route params
   const [selectedGown, setSelectedGown] = useState(null);
+
+  const closeRentalAlert = () => {
+    setAlertConfig((prev) => ({
+      ...prev,
+      visible: false,
+      onConfirm: null,
+      onCancel: null,
+    }));
+  };
+
+  const showRentalAlert = (title, message, onConfirm) => {
+    setAlertConfig({
+      visible: true,
+      title,
+      message,
+      mode: 'alert',
+      onConfirm: () => {
+        if (typeof onConfirm === 'function') {
+          onConfirm();
+        }
+        closeRentalAlert();
+      },
+      onCancel: null,
+    });
+  };
+
+  const showRentalConfirm = (title, message, onConfirm, onCancel) => {
+    setAlertConfig({
+      visible: true,
+      title,
+      message,
+      mode: 'confirm',
+      onConfirm: () => {
+        if (typeof onConfirm === 'function') {
+          onConfirm();
+        }
+        closeRentalAlert();
+      },
+      onCancel: () => {
+        if (typeof onCancel === 'function') {
+          onCancel();
+        }
+        closeRentalAlert();
+      },
+    });
+  };
 
   // --- Date helpers ---
   const getLocalDateString = (date) => {
@@ -242,6 +317,54 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
     }
   };
 
+  const verifyPendingPaymongoPayment = useCallback(async () => {
+    try {
+      const session = await sessionService.getSession();
+      const token = session?.token || authToken;
+      if (!token) return;
+
+      const pendingRaw = await AsyncStorage.getItem(PENDING_PAYMONGO_KEY);
+      if (!pendingRaw) return;
+
+      const pendingPayment = JSON.parse(pendingRaw);
+      const { rentalId, paymentLinkId } = pendingPayment || {};
+      if (!rentalId || !paymentLinkId) {
+        await clearPendingPaymongoPayment();
+        return;
+      }
+
+      const result = await mongodbService.verifyPaymongoPayment(rentalId, paymentLinkId, token);
+      await fetchUserRentals(token);
+
+      if (result.success && result.rental) {
+        if (selectedRental && String(selectedRental.id || selectedRental._id) === String(rentalId)) {
+          setSelectedRental((prev) => ({ ...prev, ...result.rental }));
+        }
+        await clearPendingPaymongoPayment();
+        showRentalAlert('Payment Verified', 'Your rental payment was confirmed by the backend.');
+        return;
+      }
+
+      if (result.message) {
+        showRentalAlert('Payment Status', result.message);
+      }
+      await clearPendingPaymongoPayment();
+    } catch (err) {
+      console.warn('PayMongo verification check failed:', err);
+      showRentalAlert('Payment Verification Failed', 'We could not confirm your payment status yet. Please refresh your rentals.');
+    }
+  }, [authToken, selectedRental]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        verifyPendingPaymongoPayment();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [verifyPendingPaymongoPayment]);
+
   // --- Date picker handlers ---
   const openStartDatePicker = () => {
     if (Platform.OS !== 'web') {
@@ -253,7 +376,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
 
   const openEndDatePicker = () => {
     if (!formData.startDateString) {
-      showAlert('Select Start Date First', 'Please select a start date before choosing an end date.');
+      showRentalAlert('Select Start Date First', 'Please select a start date before choosing an end date.');
       return;
     }
     if (Platform.OS !== 'web') {
@@ -274,13 +397,13 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
 
     if (webCalendarState.active === 'start') {
       if (sel < tomorrowAtMidnight) {
-        showAlert('Invalid Date', `Earliest available start date is ${tomorrowString}.`);
+        showRentalAlert('Invalid Date', `Earliest available start date is ${tomorrowString}.`);
         return;
       }
       setFormData(prev => ({ ...prev, startDate: sel, startDateString: selStr }));
       fetchAvailability(authToken, selectedGown?.id, selStr, formData.endDateString);
     } else {
-      if (sel <= formData.startDate) { showAlert('Invalid Date', 'End date must be after start date'); return; }
+      if (sel <= formData.startDate) { showRentalAlert('Invalid Date', 'End date must be after start date'); return; }
       setFormData(prev => ({ ...prev, endDate: sel, endDateString: selStr }));
       fetchAvailability(authToken, selectedGown?.id, formData.startDateString, selStr);
     }
@@ -335,7 +458,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
   // --- Submit rental ---
   const handleSubmit = async () => {
     if (!selectedGown || !userEmail) {
-      showAlert('Error', !userEmail ? 'Please log in first.' : 'No gown selected.');
+      showRentalAlert('Error', !userEmail ? 'Please log in first.' : 'No gown selected.');
       return;
     }
 
@@ -344,7 +467,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
     const token = session?.token || authToken;
     console.log('TOKEN:', token);
     if (!token) {
-      showAlert('Error', 'Authorization token required. Please sign in again.');
+      showRentalAlert('Error', 'Authorization token required. Please sign in again.');
       return;
     }
 
@@ -357,7 +480,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
     };
 
     if (unavailableDates.length > 0) { 
-      showAlert('Dates Unavailable', 'One or more selected dates are already booked for this gown. Please choose different dates.'); 
+      showRentalAlert('Dates Unavailable', 'One or more selected dates are already booked for this gown. Please choose different dates.'); 
       return; 
     }
 
@@ -374,24 +497,24 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
         console.warn('⚠️ Create rental failed:', res.error);
         // Handle specific backend error messages
         if (res.error?.toLowerCase().includes('phone number')) {
-          showAlert(
+          showRentalAlert(
             'Phone Number Required',
             'Please add and verify your phone number in Profile Settings before making a rental.'
           );
         } else if (res.error?.toLowerCase().includes('verify your phone')) {
-          showAlert(
+          showRentalAlert(
             'Phone Not Verified',
             'Please verify your phone number in Profile Settings before making a rental.'
           );
         } else if (res.error?.toLowerCase().includes('unavailable')) {
-          showAlert('Gown Unavailable', res.error || 'This gown is not available for the selected dates.');
+          showRentalAlert('Gown Unavailable', res.error || 'This gown is not available for the selected dates.');
         } else {
-          showAlert('Error', res.error || 'Failed to create rental.');
+          showRentalAlert('Error', res.error || 'Failed to create rental.');
         }
       }
     } catch (err) {
       console.error('❌ Error creating rental:', err);
-      showAlert('Error', 'Connection failed. Please try again.');
+      showRentalAlert('Error', 'Connection failed. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -430,40 +553,43 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'pending':               return '#3b82f6'; // blue 
-      case 'for_payment':           return '#f59e0b'; // amber 
-      case 'paid_for_confirmation': return '#8b5cf6'; // purple 
-      case 'for_pickup':            return '#06b6d4'; // cyan 
-      case 'active':                return '#10b981'; // green 
-      case 'completed':             return '#6b7280'; // grey 
-      case 'cancelled':             return '#ef4444'; // red 
-      default:                      return '#6B5D4F'; 
+      case 'pending':               return '#3b82f6';
+      case 'for_payment':           return '#f59e0b';
+      case 'paid_for_confirmation': return '#8b5cf6';
+      case 'for_pickup':            return '#06b6d4';
+      case 'active':                return '#10b981';
+      case 'completed':             return '#6b7280';
+      case 'cancelled':             return '#ef4444';
+      case 'item_lost':             return '#7c2d12';
+      default:                      return '#6B5D4F';
     }
   };
 
   const getStatusBgColor = (status) => {
     switch (status) {
-      case 'pending':               return '#dbeafe'; 
-      case 'for_payment':           return '#fef3c7'; 
-      case 'paid_for_confirmation': return '#ede9fe'; 
-      case 'for_pickup':            return '#cffafe'; 
-      case 'active':                return '#d1fae5'; 
-      case 'completed':             return '#f3f4f6'; 
-      case 'cancelled':             return '#fee2e2'; 
-      default:                      return '#F5EFE6'; 
+      case 'pending':               return '#dbeafe';
+      case 'for_payment':           return '#fef3c7';
+      case 'paid_for_confirmation': return '#ede9fe';
+      case 'for_pickup':            return '#cffafe';
+      case 'active':                return '#d1fae5';
+      case 'completed':             return '#f3f4f6';
+      case 'cancelled':             return '#fee2e2';
+      case 'item_lost':             return '#fed7aa';
+      default:                      return '#F5EFE6';
     }
   };
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'pending':               return 'Pending'; 
-      case 'for_payment':           return 'For Payment'; 
-      case 'paid_for_confirmation': return 'Paid - Confirming'; 
-      case 'for_pickup':            return 'For Pickup'; 
-      case 'active':                return 'Active'; 
-      case 'completed':             return 'Completed'; 
-      case 'cancelled':             return 'Cancelled'; 
-      default: return (status || '').charAt(0).toUpperCase() + (status || '').slice(1); 
+      case 'pending':               return 'Pending';
+      case 'for_payment':           return 'For Payment';
+      case 'paid_for_confirmation': return 'Paid - Confirming';
+      case 'for_pickup':            return 'For Pickup';
+      case 'active':                return 'Active';
+      case 'completed':             return 'Completed';
+      case 'cancelled':             return 'Cancelled';
+      case 'item_lost':             return 'Item Lost';
+      default: return (status || '').charAt(0).toUpperCase() + (status || '').slice(1);
     }
   };
 
@@ -644,7 +770,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
                                 fetchAvailability(authToken, selectedGown?.id, formData.startDateString, dateStr);
                                 setShowEndDatePicker(false);
                               } else {
-                                showAlert('Invalid Date', 'End date must be after start date');
+                                showRentalAlert('Invalid Date', 'End date must be after start date');
                                 setShowEndDatePicker(false);
                               }
                             }}
@@ -1114,7 +1240,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
               </View> 
             ) : (() => { 
               const historyRentals = userRentals.filter(r => 
-                ['completed','returned','cancelled'].includes(r.status) 
+                ['completed', 'cancelled', 'item_lost'].includes(r.status) 
               ); 
               return historyRentals.length > 0 ? ( 
                 <View style={styles.rentalsList}> 
@@ -1187,9 +1313,9 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
                   authToken={authToken}
                 />
                 <View style={styles.rentalsList}>
-                  {userRentals.filter(r => !['completed','returned','cancelled'].includes(r.status)).length > 0 ? (
+                  {userRentals.filter(r => !['completed', 'cancelled', 'item_lost'].includes(r.status)).length > 0 ? (
                     userRentals
-                      .filter(r => !['completed','returned','cancelled'].includes(r.status))
+                      .filter(r => !['completed', 'cancelled', 'item_lost'].includes(r.status))
                       .map((rental) => (
                       <TouchableOpacity
                         key={rental.id || rental._id}
@@ -1274,6 +1400,16 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
           </View>
         </View>
       </Modal>
+
+      <CustomAlertModal
+        visible={alertConfig.visible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        mode={alertConfig.mode}
+        onConfirm={alertConfig.onConfirm}
+        onCancel={alertConfig.onCancel}
+        onClose={closeRentalAlert}
+      />
     </SafeAreaView>
   );
 }

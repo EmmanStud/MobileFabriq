@@ -13,6 +13,7 @@ import {
     Platform,
     ActivityIndicator,
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { Search, Heart, Calendar, MapPin, Star, Menu, ArrowRight, Instagram, Facebook, Mail, X, ShoppingBag, Ruler, User } from 'lucide-react-native';
 import { sessionService } from '../services/sessionService';
 import { mongodbService } from '../services/mongodbService';
@@ -31,6 +32,9 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
     const [loading, setLoading] = useState(true);
     const [authToken, setAuthToken] = useState(null); 
     const [serverFavorites, setServerFavorites] = useState([]);
+    const [show3DViewer, setShow3DViewer] = useState(false);
+
+    const VIEWER_BASE_URL = 'https://fabriq-3d-server-production.up.railway.app';
 
     const categories = ['All', 'Evening Gown', 'Wedding Dress', 'Ball Gown', 'Cocktail Dress'];
 
@@ -105,6 +109,8 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
         const status = allowedStatuses.includes((item.status || '').toLowerCase())
             ? item.status.toLowerCase()
             : 'reserved';
+        const model3dUrl = typeof item.model3dUrl === 'string' ? item.model3dUrl.trim() : (typeof item.model3DUrl === 'string' ? item.model3DUrl.trim() : '');
+
         return {
             id: item.id || item._id || `${index}`,
             sku: item.sku,
@@ -118,6 +124,8 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
             branch: item.branch || 'Main Branch',
             image: imageSource,
             hasImage: !!imageSource,
+            model3dUrl,
+            has3DModel: !!model3dUrl,
             description: item.description || '',
             rating: item.rating ?? 0,
             ratings: Array.isArray(item.ratings)
@@ -592,6 +600,14 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
 
                                     {/* Action Buttons */}
                                     <View style={styles.actionsContainer}>
+                                        {selectedGown.has3DModel && (
+                                            <TouchableOpacity 
+                                                style={styles.secondaryButton}
+                                                onPress={() => setShow3DViewer(true)}
+                                            >
+                                                <Text style={styles.secondaryButtonText}>View 3D</Text>
+                                            </TouchableOpacity>
+                                        )}
                                         {selectedGown.status === 'available' && (
                                             <>
                                                 <TouchableOpacity 
@@ -657,6 +673,32 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
                 </View>
             </Modal>
 
+            <Modal visible={show3DViewer && !!selectedGown?.model3dUrl} transparent animationType="slide">
+                <View style={styles.viewerOverlay}>
+                    <View style={styles.viewerCard}>
+                        <View style={styles.viewerHeader}>
+                            <Text style={styles.viewerTitle}>{selectedGown?.name || '3D Preview'}</Text>
+                            <TouchableOpacity onPress={() => setShow3DViewer(false)}>
+                                <X color="#333" size={24} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <WebView
+                            source={{
+                                uri: `${VIEWER_BASE_URL}/viewer?url=${encodeURIComponent(selectedGown?.model3dUrl || '')}`,
+                            }}
+                            style={styles.viewerWebView}
+                            startInLoadingState
+                            renderLoading={() => (
+                                <View style={styles.viewerLoader}>
+                                    <ActivityIndicator size="large" color="#D4AF37" />
+                                </View>
+                            )}
+                        />
+                    </View>
+                </View>
+            </Modal>
+
             {/* STANDARDIZED HAMBURGER MENU */}
             <HamburgerMenu
               visible={menuVisible}
@@ -715,6 +757,12 @@ const styles = StyleSheet.create({
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: Platform.OS === 'web' ? 'center' : 'flex-end', alignItems: Platform.OS === 'web' ? 'center' : undefined, padding: Platform.OS === 'web' ? 20 : 0 },
     modalCard: { backgroundColor: '#fff', borderRadius: Platform.OS === 'web' ? 16 : 0, borderTopLeftRadius: Platform.OS === 'ios' || Platform.OS === 'android' ? 16 : undefined, borderTopRightRadius: Platform.OS === 'ios' || Platform.OS === 'android' ? 16 : undefined, maxHeight: '95%', width: Platform.OS === 'web' ? '90%' : '100%', maxWidth: Platform.OS === 'web' ? 600 : undefined, position: 'relative' },
     closeBtn: { position: 'absolute', top: 12, right: 12, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.9)', padding: 8, borderRadius: 20 },
+    viewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 16 },
+    viewerCard: { backgroundColor: '#111', borderRadius: 16, overflow: 'hidden', height: '82%' },
+    viewerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#1a1a1a', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.12)' },
+    viewerTitle: { color: '#fff', fontFamily: 'serif', fontSize: 20 },
+    viewerWebView: { flex: 1, backgroundColor: '#111' },
+    viewerLoader: { flex: 1, backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' },
     modalContent: { paddingBottom: 40 },
     modalImageFull: { width: '100%', height: 350, backgroundColor: '#F5F1E8' },
     detailsSection: { padding: Platform.OS === 'web' ? 32 : 20, paddingTop: Platform.OS === 'web' ? 24 : 20 },

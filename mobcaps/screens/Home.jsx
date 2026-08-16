@@ -1113,21 +1113,23 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
 
       {/* AUTH MODAL */}
       <Modal visible={authMode !== null} animationType="fade" transparent={true}>
-  <View style={{ flex: 1 }}>
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.authOverlay}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          style={{ width: '100%' }}
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            width: '100%',
-          }}
-          keyboardShouldPersistTaps="handled"
+        <KeyboardAvoidingView
+          style={styles.authViewport}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          enabled={true}
         >
-          <View style={styles.authCard}>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.authOverlay}>
+              <View style={styles.authCardShell}>
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  style={styles.authScrollView}
+                  contentContainerStyle={styles.authScrollContent}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                  bounces={false}
+                >
+                  <View style={styles.authCard}>
       <TouchableOpacity style={styles.authClose} onPress={() => {
         setAuthMode(null); 
         setVerificationStep('form');
@@ -1609,11 +1611,12 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         )}
       </View>
     </View>
-        </ScrollView>
-      </View>
-    </TouchableWithoutFeedback>
-  </View>
-</Modal>
+                </ScrollView>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </Modal>
 
 {/* TERMS AND CONDITIONS MODAL */}
 <Modal visible={showTermsModal} animationType="fade" transparent={true}>
@@ -1688,21 +1691,23 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
 
 {/* FORGOT PASSWORD MODAL (SEPARATE FROM LOGIN) */}
 <Modal visible={showForgotPasswordModal} animationType="fade" transparent={true}>
-  <View style={{ flex: 1 }}>
+  <KeyboardAvoidingView
+    style={styles.authViewport}
+    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    enabled={true}
+  >
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.authOverlay}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          style={{ width: '100%' }}
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            width: '100%',
-          }}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.authCard}>
+        <View style={styles.authCardShell}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={styles.authScrollView}
+            contentContainerStyle={styles.authScrollContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            bounces={false}
+          >
+            <View style={styles.authCard}>
       <TouchableOpacity style={styles.authClose} onPress={() => {
         setShowForgotPasswordModal(false);
         setForgotPasswordForm({ email: '', code: '', newPassword: '', confirmPassword: '', step: 'email' });
@@ -1846,10 +1851,11 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         </TouchableOpacity>
       </View>
     </View>
-        </ScrollView>
+          </ScrollView>
+        </View>
       </View>
     </TouchableWithoutFeedback>
-  </View>
+  </KeyboardAvoidingView>
 </Modal>
 
 {/* SUCCESS MODAL - PASSWORD RESET */}
@@ -1999,11 +2005,42 @@ legalText: {
   fontSize: 9,
   color: 'rgba(255,255,255,0.5)',
 },
-  authOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12 },
+  authViewport: {
+    flex: 1,
+  },
+  authOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingHorizontal: 12,
+    paddingVertical: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  authCardShell: {
+    width: '100%',
+    maxWidth: 460,
+    maxHeight: '88%',
+    alignSelf: 'center',
+    backgroundColor: '#FAF7F0',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  authScrollView: {
+    width: '100%',
+    maxWidth: 460,
+    maxHeight: '100%',
+    alignSelf: 'center',
+    backgroundColor: '#FAF7F0',
+  },
+  authScrollContent: {
+    flexGrow: 1,
+    alignItems: 'stretch',
+    paddingBottom: 18,
+  },
   authCard: {
     width: '100%',
     maxWidth: 460,
-    backgroundColor: '#FAF7F0',
+    backgroundColor: 'transparent',
     padding: 28,
     paddingHorizontal: 24,
     borderRadius: 2,

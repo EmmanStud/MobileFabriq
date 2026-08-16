@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, Image, StyleSheet,
-  ActivityIndicator, ScrollView, TextInput,
+  ActivityIndicator, ScrollView, TextInput, Linking,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { API_URL } from '../services/apiConfig';
+
+const PENDING_PAYMONGO_KEY = 'mobcaps_pending_paymongo_payment';
 
 export default function RentalDetailsModal({ visible, rental, onClose, onReceiptUploaded, authToken }) {
 
@@ -36,6 +39,7 @@ export default function RentalDetailsModal({ visible, rental, onClose, onReceipt
       case 'active':                return 'Active';
       case 'completed':             return 'Completed';
       case 'cancelled':             return 'Cancelled';
+      case 'item_lost':             return 'Item Lost';
       default:
         return (status || '').charAt(0).toUpperCase() + (status || '').slice(1);
     }
@@ -50,7 +54,43 @@ export default function RentalDetailsModal({ visible, rental, onClose, onReceipt
       case 'active':                return '#10b981';
       case 'completed':             return '#6b7280';
       case 'cancelled':             return '#ef4444';
+      case 'item_lost':             return '#7c2d12';
       default:                      return '#6B5D4F';
+    }
+  };
+
+  const handlePaymongoCheckout = async () => {
+    try {
+      const rentalId = rental.id || rental._id;
+      const response = await fetch(`${API_URL}/rentals/${rentalId}/paymongo-link`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.success || !data?.paymentLinkUrl) {
+        throw new Error(data?.message || data?.error || 'Failed to create PayMongo payment link.');
+      }
+
+      await AsyncStorage.setItem(PENDING_PAYMONGO_KEY, JSON.stringify({
+        rentalId,
+        paymentLinkId: data.paymentLinkId,
+      }));
+
+      const canOpen = await Linking.canOpenURL(data.paymentLinkUrl);
+      if (!canOpen) {
+        throw new Error('This device cannot open the PayMongo checkout page.');
+      }
+
+      await Linking.openURL(data.paymentLinkUrl);
+      setShowConfirm(false);
+      setShowPayment(false);
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Unable to open PayMongo checkout.');
     }
   };
 
@@ -303,7 +343,7 @@ export default function RentalDetailsModal({ visible, rental, onClose, onReceipt
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.label}>Balance Due</Text>
-                <Text style={styles.value}>₱{(rental.downpayment || 0).toLocaleString()}</Text>
+                <Text style={styles.value}>₱{Math.max(0, (rental.totalPrice || 0) - (rental.downpayment || 0)).toLocaleString()}</Text>
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
@@ -315,7 +355,7 @@ export default function RentalDetailsModal({ visible, rental, onClose, onReceipt
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.payNowBtn, { flex: 1, backgroundColor: '#1a1a1a' }]}
-                onPress={() => { setShowConfirm(false); setShowPayment(true); }}
+                onPress={handlePaymongoCheckout}
               >
                 <Text style={[styles.payNowBtnText, { color: '#fff' }]}>Yes, Proceed</Text>
               </TouchableOpacity>

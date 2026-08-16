@@ -315,16 +315,18 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
       const ordersData = ordersRes.ok ? await ordersRes.json() : []; 
       const orders = Array.isArray(ordersData) ? ordersData : (ordersData.orders || []); 
   
-      // Build unified history — completed and cancelled only 
+      const terminalRentalStatuses = ['completed', 'cancelled', 'item_lost'];
+
+      // Build unified history using the backend rental-status enum.
       const historyItems = [ 
         ...rentals 
-          .filter(r => r.status === 'completed' || r.status === 'cancelled') 
+          .filter(r => terminalRentalStatuses.includes(r.status)) 
           .map(r => ({ 
             id: r.referenceId || r.id, 
             type: 'Rental', 
             item: r.gownName || 'Gown Rental', 
             date: r.startDate || r.createdAt || '', 
-            status: r.status.charAt(0).toUpperCase() + r.status.slice(1), 
+            status: r.status === 'item_lost' ? 'Item Lost' : r.status.charAt(0).toUpperCase() + r.status.slice(1), 
             branch: r.branch || '', 
           })), 
         ...appointments 

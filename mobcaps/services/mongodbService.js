@@ -404,6 +404,91 @@ export const mongodbService = {
     }
   },
 
+  async createPaymongoPaymentLink(rentalId, token = null, options = {}) {
+    try {
+      if (!MONGODB_API_URL) {
+        return { success: false, error: 'API URL not configured' };
+      }
+      if (!token) {
+        return { success: false, error: 'Authorization token required. Please sign in again.' };
+      }
+
+      const url = this._buildUrl(`/rentals/${rentalId}/paymongo-link`);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          successUrl: options.successUrl,
+          cancelUrl: options.cancelUrl,
+        }),
+      });
+
+      const body = await response.json().catch(() => null);
+      if (response.ok && body?.success) {
+        return {
+          success: true,
+          paymentLinkUrl: body.paymentLinkUrl,
+          paymentLinkId: body.paymentLinkId,
+          message: body.message || 'Payment link created successfully.',
+        };
+      }
+
+      return {
+        success: false,
+        error: body?.message || body?.error || 'Failed to create payment link.',
+        status: response.status,
+      };
+    } catch (err) {
+      console.warn('createPaymongoPaymentLink error:', err);
+      return { success: false, error: err.message || 'Connection failed while creating payment link.' };
+    }
+  },
+
+  async verifyPaymongoPayment(rentalId, paymentLinkId, token = null) {
+    try {
+      if (!MONGODB_API_URL) {
+        return { success: false, message: 'API URL not configured' };
+      }
+      if (!token) {
+        return { success: false, message: 'Authorization token required. Please sign in again.' };
+      }
+      if (!rentalId || !paymentLinkId) {
+        return { success: false, message: 'Payment verification could not start. Please try again.' };
+      }
+
+      const url = this._buildUrl(`/rentals/${rentalId}/paymongo-verify`);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ paymentLinkId }),
+      });
+
+      const body = await response.json().catch(() => null);
+      if (response.ok) {
+        return {
+          success: !!body?.success,
+          message: body?.message || null,
+          rental: body?.rental || null,
+        };
+      }
+
+      return {
+        success: false,
+        message: body?.message || body?.error || 'Payment verification failed.',
+        rental: body?.rental || null,
+      };
+    } catch (err) {
+      console.warn('verifyPaymongoPayment error:', err);
+      return { success: false, message: err.message || 'Failed to verify payment.' };
+    }
+  },
+
   // Create a new custom order associated with a user
   async createCustomOrder(order, token) {
     try {
