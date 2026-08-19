@@ -18,7 +18,7 @@
  */
 
 import { Platform } from 'react-native';
-import { API_URL } from './apiConfig';
+import { API_URL, fetchAPI } from './apiConfig';
 
 // ============================================
 // MongoDB Database Service
@@ -723,6 +723,21 @@ export const mongodbService = {
       return null;
     } catch (err) {
       console.warn('getMeasurements error:', err);
+      return null;
+    }
+  },
+
+  async getBodyMeasurements(customerId) {
+    try {
+      if (!MONGODB_API_URL || !customerId) return null;
+      const response = await fetchAPI(`/body-measurement/${encodeURIComponent(customerId)}`);
+      const data = await response.json().catch(() => null);
+      if (response.ok && data?.success === true) {
+        return data.profile || null;
+      }
+      return null;
+    } catch (err) {
+      console.warn('getBodyMeasurements error:', err);
       return null;
     }
   },

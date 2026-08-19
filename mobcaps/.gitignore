@@ -44,3 +44,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+.expo-export-date-ui-check/
+.expo-export-step2-check/
+.expo-export-warning-ui-check/
+.expo-export/
+.expo-export-check/

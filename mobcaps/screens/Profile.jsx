@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -8,14 +9,8 @@ import {
   SafeAreaView,
   TextInput,
   ActivityIndicator,
-  Modal,
-  Animated,
-  Easing,
-  Dimensions,
 } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
-import { User, Ruler, History, Heart, Camera, Menu } from 'lucide-react-native';
+import { User, History, Heart, Camera } from 'lucide-react-native';
 import HamburgerMenu from '../components/HamburgerMenu';
 import Header from '../components/Header';
 import EditProfileModal from '../components/EditProfileModal';
@@ -137,29 +132,8 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
   const showCustomConfirm = (title, message, onConfirm) =>
     openAlert({ title, message, mode: 'confirm', onConfirm, onCancel: closeAlert });
 
-  const [measurements, setMeasurements] = useState({ 
-    bust: null, waist: null, hips: null, 
-    height: null, shoulderWidth: null, sleeveLength: null, 
-    updatedAt: null, 
-  }); 
-  const [measurementsLoading, setMeasurementsLoading] = useState(false); 
-  const [measurementEditMode, setMeasurementEditMode] = useState(false); 
-  const [measurementInputs, setMeasurementInputs] = useState({ 
-    bust: '', waist: '', hips: '', 
-    height: '', shoulderWidth: '', sleeveLength: '', 
-  }); 
-  const [measurementSaving, setMeasurementSaving] = useState(false); 
-  const [measurementError, setMeasurementError] = useState('');
-
-  const [scannerVisible, setScannerVisible] = useState(false); 
-  const [scanPhase, setScanPhase] = useState('idle'); 
-  // phases: 'idle' | 'positioning' | 'scanning' | 'processing' | 'done' 
-  const [scanProgress, setScanProgress] = useState(0); 
-  const [scanStatusText, setScanStatusText] = useState(''); 
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions(); 
-  const cameraRef = useRef(null); 
-  const scanLineAnim = useRef(new Animated.Value(0)).current; 
-  const pulseAnim = useRef(new Animated.Value(1)).current; 
+  const [measurements, setMeasurements] = useState({ measuredAt: null });
+  const [measurementsLoading, setMeasurementsLoading] = useState(false);
 
   const [favorites, setFavorites] = useState([]); 
   const [favoritesLoading, setFavoritesLoading] = useState(false);
@@ -245,7 +219,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
         }
 
         // Fetch real measurements, favorites, and history
-        await fetchMeasurements(token);
+        await fetchMeasurements();
         await fetchFavorites(token);
         await fetchHistory(token);
 
@@ -257,20 +231,22 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
     checkSession();
   }, [navigation]);
 
-  const fetchMeasurements = async (token) => { 
+  useFocusEffect(
+    React.useCallback(() => {
+      if (authToken) {
+        fetchMeasurements();
+      }
+    }, [authToken])
+  );
+
+  const fetchMeasurements = async () => {
     setMeasurementsLoading(true); 
     try { 
-      const data = await mongodbService.getMeasurements(token); 
+      const session = await sessionService.getSession();
+      const customerId = session?.userId;
+      const data = await mongodbService.getBodyMeasurements(customerId);
       if (data) { 
-        setMeasurements(data); 
-        setMeasurementInputs({ 
-          bust: data.bust != null ? String(data.bust) : '', 
-          waist: data.waist != null ? String(data.waist) : '', 
-          hips: data.hips != null ? String(data.hips) : '', 
-          height: data.height != null ? String(data.height) : '', 
-          shoulderWidth: data.shoulderWidth != null ? String(data.shoulderWidth) : '', 
-          sleeveLength: data.sleeveLength != null ? String(data.sleeveLength) : '', 
-        }); 
+        setMeasurements(data);
       } 
     } catch (err) { 
       console.warn('fetchMeasurements error:', err); 
@@ -366,218 +342,6 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
       await mongodbService.updateFavorites(updated, authToken); 
     } catch (err) { 
       console.warn('Failed to remove favorite:', err); 
-    } 
-  };
-
-  const handleSaveMeasurements = async () => { 
-    setMeasurementSaving(true); 
-    setMeasurementError(''); 
-    try { 
-      const payload = {}; 
-      const fields = ['bust', 'waist', 'hips', 'height', 'shoulderWidth', 'sleeveLength']; 
-      for (const field of fields) { 
-        const val = measurementInputs[field]; 
-        if (val === '' || val === null) { 
-          payload[field] = null; 
-        } else { 
-          const num = Number(val); 
-          if (isNaN(num) || num <= 0) { 
-            setMeasurementError(`Invalid value for ${field}. Must be a positive number.`); 
-            setMeasurementSaving(false); 
-            return; 
-          } 
-          payload[field] = num; 
-        } 
-      } 
-      const res = await mongodbService.updateMeasurements(payload, authToken); 
-      if (res.success) { 
-        setMeasurements(prev => ({ ...prev, ...payload, updatedAt: new Date().toISOString() })); 
-        setMeasurementEditMode(false); 
-        showCustomAlert('Saved!', 'Your measurements have been updated.'); 
-      } else { 
-        setMeasurementError(res.error || 'Failed to save measurements.'); 
-      } 
-    } catch (err) { 
-      setMeasurementError(err.message || 'Connection error.'); 
-    } finally { 
-      setMeasurementSaving(false); 
-    } 
-  };
-
-  // 1. Opens the scanner modal 
-  const handleStartAIMeasurement = async () => { 
-    if (!cameraPermission?.granted) { 
-      const result = await requestCameraPermission(); 
-      if (!result.granted) { 
-        showCustomAlert( 
-          'Camera Permission Required', 
-          'Please allow camera access to use AI Measurement.' 
-        ); 
-        return; 
-      } 
-    } 
-    setScanPhase('positioning'); 
-    setScanProgress(0); 
-    setScanStatusText('Position your full body in the frame'); 
-    setScannerVisible(true); 
-  }; 
-  
-  // 2. Runs the full fake scan sequence then captures photo 
-  const handleCaptureScan = async () => { 
-    if (!cameraRef.current || scanPhase !== 'positioning') return; 
-  
-    setScanPhase('scanning'); 
-    setScanStatusText('Scanning body outline...'); 
-  
-    // Start scan line animation (top to bottom loop) 
-    Animated.loop( 
-      Animated.sequence([ 
-        Animated.timing(scanLineAnim, { 
-          toValue: 1, 
-          duration: 1500, 
-          easing: Easing.linear, 
-          useNativeDriver: true, 
-        }), 
-        Animated.timing(scanLineAnim, { 
-          toValue: 0, 
-          duration: 0, 
-          useNativeDriver: true, 
-        }), 
-      ]) 
-    ).start(); 
-  
-    // Pulse animation for body outline 
-    Animated.loop( 
-      Animated.sequence([ 
-        Animated.timing(pulseAnim, { 
-          toValue: 1.04, 
-          duration: 700, 
-          useNativeDriver: true, 
-        }), 
-        Animated.timing(pulseAnim, { 
-          toValue: 1, 
-          duration: 700, 
-          useNativeDriver: true, 
-        }), 
-      ]) 
-    ).start(); 
-  
-    // Progress simulation 
-    const progressSteps = [ 
-      { pct: 15, text: 'Detecting body keypoints...', delay: 600 }, 
-      { pct: 30, text: 'Measuring shoulder width...', delay: 1200 }, 
-      { pct: 50, text: 'Analyzing torso proportions...', delay: 1800 }, 
-      { pct: 65, text: 'Calculating waist & hip ratio...', delay: 2400 }, 
-      { pct: 80, text: 'Estimating sleeve length...', delay: 3000 }, 
-      { pct: 95, text: 'Finalizing measurements...', delay: 3600 }, 
-    ]; 
-  
-    progressSteps.forEach(({ pct, text, delay }) => { 
-      setTimeout(() => { 
-        setScanProgress(pct); 
-        setScanStatusText(text); 
-      }, delay); 
-    }); 
-  
-    // Capture photo at 1.5 seconds into scan 
-    setTimeout(async () => { 
-      try { 
-        const photo = await cameraRef.current.takePictureAsync({ 
-          quality: 0.5, 
-          skipProcessing: true, 
-        }); 
-  
-        // After capture, move to processing phase 
-        setTimeout(() => { 
-          setScanPhase('processing'); 
-          setScanStatusText('Processing results...'); 
-          setScanProgress(100); 
-          scanLineAnim.stopAnimation(); 
-          pulseAnim.stopAnimation(); 
-  
-          // Derive measurements from photo pixel data 
-          setTimeout(async () => { 
-            await deriveMeasurementsFromPhoto(photo.uri); 
-          }, 800); 
-        }, 2200); 
-  
-      } catch (err) { 
-        console.warn('Capture error:', err); 
-        setScannerVisible(false); 
-        setScanPhase('idle'); 
-        showCustomAlert('Scan Failed', 'Could not capture photo. Please try again.'); 
-      } 
-    }, 1500); 
-  }; 
-  
-  // 3. Derives realistic measurements seeded from actual photo data 
-  const deriveMeasurementsFromPhoto = async (uri) => { 
-    try { 
-      // Resize to 1x1 to get average pixel color as seed 
-      const sampled = await manipulateAsync( 
-        uri, 
-        [{ resize: { width: 1, height: 1 } }], 
-        { compress: 1, format: SaveFormat.JPEG } 
-      ); 
-  
-      // Read bytes for a real color signal 
-      let seed = 128; // fallback 
-      try { 
-        const response = await fetch(sampled.uri); 
-        const buffer = await response.arrayBuffer(); 
-        const bytes = new Uint8Array(buffer); 
-        // Use bytes near the end of the JPEG for color signal 
-        const len = bytes.length; 
-        if (len > 6) { 
-          seed = ( 
-            bytes[Math.floor(len * 0.3)] * 31 + 
-            bytes[Math.floor(len * 0.6)] * 17 + 
-            bytes[Math.floor(len * 0.9)] * 7 
-          ) % 256; 
-        } 
-      } catch (_) {} 
-  
-      // Map seed (0–255) to realistic Filipino female gown size ranges 
-      // Seed deterministically picks measurements — same photo = same result 
-      const normalized = seed / 255; // 0.0 to 1.0 
-  
-      // Realistic ranges for bust/waist/hips in inches, height in cm 
-      // Spread across XS (32/24/34) to XL (40/34/42) 
-      const bust = Math.round((32 + normalized * 8) * 10) / 10; 
-      const waist = Math.round((24 + normalized * 10) * 10) / 10; 
-      const hips = Math.round((34 + normalized * 8) * 10) / 10; 
-      const height = Math.round(150 + normalized * 20); // 150cm to 170cm 
-      const shoulderWidth = Math.round((13 + normalized * 4) * 10) / 10; 
-      const sleeveLength = Math.round((22 + normalized * 4) * 10) / 10; 
-  
-      const derived = { bust, waist, hips, height, shoulderWidth, sleeveLength }; 
-  
-      // Auto-save to backend 
-      const res = await mongodbService.updateMeasurements(derived, authToken); 
-  
-      if (res.success) { 
-        setMeasurements(prev => ({ 
-          ...prev, 
-          ...derived, 
-          updatedAt: new Date().toISOString(), 
-        })); 
-        setMeasurementInputs({ 
-          bust: String(bust), 
-          waist: String(waist), 
-          hips: String(hips), 
-          height: String(height), 
-          shoulderWidth: String(shoulderWidth), 
-          sleeveLength: String(sleeveLength), 
-        }); 
-      } 
-  
-      setScanPhase('done'); 
-      setScanStatusText('Measurements captured!'); 
-  
-    } catch (err) { 
-      console.warn('Measurement derivation error:', err); 
-      setScanPhase('done'); 
-      setScanStatusText('Scan complete'); 
     } 
   };
 
@@ -1070,84 +834,45 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
                 </View> 
                 <TouchableOpacity 
                   style={styles.aiMeasurementBtn} 
-                  onPress={handleStartAIMeasurement} 
+                  onPress={() => navigation.navigate('MeasurementHeightInput')}
                 > 
                   <Camera size={16} color="#fff" style={{ marginRight: 8 }} /> 
-                  <Text style={styles.aiMeasurementBtnText}>Start AI Measurement</Text> 
+                  <Text style={styles.aiMeasurementBtnText}>Start Digital Measurement</Text>
                 </TouchableOpacity> 
               </View> 
               <View style={styles.measurementsCard}> 
                 <View style={styles.measurementsHeader}> 
                   <View> 
                     <Text style={styles.sectionTitle}>Your Measurements</Text> 
-                    {measurements.updatedAt ? ( 
+                    {measurements.measuredAt ? (
                       <Text style={styles.measurementsDate}> 
-                        Last updated: {new Date(measurements.updatedAt).toLocaleDateString()} 
+                        Last updated: {new Date(measurements.measuredAt).toLocaleDateString()}
                       </Text> 
                     ) : ( 
                       <Text style={styles.measurementsDate}>No measurements saved yet</Text> 
                     )} 
                   </View> 
-                  <TouchableOpacity 
-                    style={styles.manualEntryBtn} 
-                    onPress={() => setMeasurementEditMode(!measurementEditMode)} 
-                  > 
-                    <Text style={styles.manualEntryBtnText}> 
-                      {measurementEditMode ? 'Cancel' : 'Edit'} 
-                    </Text> 
-                  </TouchableOpacity> 
                 </View> 
            
                 {measurementsLoading ? ( 
                   <ActivityIndicator size="small" color="#D4AF37" style={{ marginVertical: 20 }} /> 
-                ) : measurementEditMode ? ( 
-                  <View> 
-                    {[ 
-                      { key: 'bust', label: 'Bust (inches)' }, 
-                      { key: 'waist', label: 'Waist (inches)' }, 
-                      { key: 'hips', label: 'Hips (inches)' }, 
-                      { key: 'height', label: 'Height (cm)' }, 
-                      { key: 'shoulderWidth', label: 'Shoulder Width (inches)' }, 
-                      { key: 'sleeveLength', label: 'Sleeve Length (inches)' }, 
-                    ].map(({ key, label }) => ( 
-                      <View key={key} style={{ marginBottom: 12 }}> 
-                        <Text style={styles.label}>{label}</Text> 
-                        <TextInput 
-                          style={styles.phoneInput} 
-                          placeholder={`Enter ${label}`} 
-                          value={measurementInputs[key]} 
-                          onChangeText={(val) => setMeasurementInputs(prev => ({ ...prev, [key]: val }))} 
-                          keyboardType="decimal-pad" 
-                        /> 
-                      </View> 
-                    ))} 
-                    {measurementError ? ( 
-                      <Text style={{ color: '#DC2626', fontSize: 12, marginBottom: 8 }}>{measurementError}</Text> 
-                    ) : null} 
-                    <TouchableOpacity 
-                      style={styles.editBtn} 
-                      onPress={handleSaveMeasurements} 
-                      disabled={measurementSaving} 
-                    > 
-                      <Text style={styles.editBtnText}> 
-                        {measurementSaving ? 'Saving...' : 'Save Measurements'} 
-                      </Text> 
-                    </TouchableOpacity> 
-                  </View> 
                 ) : ( 
                   <View style={styles.measurementsGrid}> 
                     {[ 
-                      { key: 'bust', label: 'Bust' }, 
+                      { key: 'shoulderWidth', label: 'Shoulder Width' },
+                      { key: 'chest', label: 'Chest' },
                       { key: 'waist', label: 'Waist' }, 
                       { key: 'hips', label: 'Hips' }, 
+                      { key: 'armLength', label: 'Arm Length' },
+                      { key: 'inseam', label: 'Inseam' },
+                      { key: 'torsoLength', label: 'Torso Length' },
+                      { key: 'neck', label: 'Neck' },
                       { key: 'height', label: 'Height' }, 
-                      { key: 'shoulderWidth', label: 'Shoulder' }, 
-                      { key: 'sleeveLength', label: 'Sleeve Length' }, 
                     ].map(({ key, label }) => ( 
                       <View key={key} style={styles.measurementItem}> 
                         <Text style={styles.measurementLabel}>{label}</Text> 
                         <Text style={styles.measurementValue}> 
-                          {measurements[key] != null ? measurements[key] : '-'} 
+                          {typeof measurements[key] === 'number' && Number.isFinite(measurements[key]) ? `${measurements[key]} cm` : 'Unavailable'}
                         </Text> 
                       </View> 
                     ))} 
@@ -1277,222 +1002,6 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
         onCancel={alertConfig.onCancel}
         onClose={closeAlert}
       />
-
-      {/* AI Measurement Scanner Modal */}
-      <Modal 
-        visible={scannerVisible} 
-        animationType="slide" 
-        statusBarTranslucent 
-        onRequestClose={() => { 
-          if (scanPhase === 'positioning' || scanPhase === 'done') { 
-            setScannerVisible(false); 
-            setScanPhase('idle'); 
-            scanLineAnim.setValue(0); 
-            pulseAnim.setValue(1); 
-          } 
-        }} 
-      > 
-        <View style={{ 
-          flex: 1, 
-          backgroundColor: '#000', 
-          justifyContent: 'space-between', 
-        }}> 
-          {/* Camera */} 
-          <CameraView 
-            ref={cameraRef} 
-            style={{ ...StyleSheet.absoluteFillObject }} 
-            facing="back" 
-          /> 
-      
-          {/* Dark overlay top */} 
-          <View style={{ 
-            backgroundColor: 'rgba(0,0,0,0.45)', 
-            paddingTop: 56, 
-            paddingHorizontal: 20, 
-            paddingBottom: 16, 
-            alignItems: 'center', 
-          }}> 
-            <Text style={{ color: '#D4AF37', fontSize: 18, fontWeight: '700', letterSpacing: 1 }}> 
-              AI Smart Measurement 
-            </Text> 
-            <Text style={{ color: '#fff', fontSize: 13, marginTop: 4, opacity: 0.8 }}> 
-              {scanStatusText} 
-            </Text> 
-          </View> 
-      
-          {/* Body outline + scan line */} 
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}> 
-            <Animated.View style={{ 
-              transform: [{ scale: pulseAnim }], 
-              alignItems: 'center', 
-            }}> 
-              {/* SVG body silhouette using View shapes */} 
-              <View style={{ 
-                width: 140, 
-                height: 320, 
-                borderWidth: 2, 
-                borderColor: scanPhase === 'scanning' ? '#D4AF37' : 'rgba(212,175,55,0.5)', 
-                borderRadius: 70, 
-                overflow: 'hidden', 
-                position: 'relative', 
-              }}> 
-                {/* Scan line */} 
-                {scanPhase === 'scanning' && ( 
-                  <Animated.View style={{ 
-                    position: 'absolute', 
-                    left: 0, 
-                    right: 0, 
-                    height: 2, 
-                    backgroundColor: '#D4AF37', 
-                    opacity: 0.9, 
-                    transform: [{ 
-                      translateY: scanLineAnim.interpolate({ 
-                        inputRange: [0, 1], 
-                        outputRange: [0, 320], 
-                      }), 
-                    }], 
-                  }} /> 
-                )} 
-      
-                {/* Done checkmark overlay */} 
-                {scanPhase === 'done' && ( 
-                  <View style={{ 
-                    ...StyleSheet.absoluteFillObject, 
-                    backgroundColor: 'rgba(212,175,55,0.15)', 
-                    justifyContent: 'center', 
-                    alignItems: 'center', 
-                  }}> 
-                    <Text style={{ fontSize: 48 }}>✓</Text> 
-                  </View> 
-                )} 
-              </View> 
-      
-              {/* Corner markers */} 
-              {['topLeft','topRight','bottomLeft','bottomRight'].map(corner => ( 
-                <View key={corner} style={{ 
-                  position: 'absolute', 
-                  width: 20, height: 20, 
-                  borderColor: '#D4AF37', 
-                  borderTopWidth: corner.startsWith('top') ? 3 : 0, 
-                  borderBottomWidth: corner.startsWith('bottom') ? 3 : 0, 
-                  borderLeftWidth: corner.endsWith('Left') ? 3 : 0, 
-                  borderRightWidth: corner.endsWith('Right') ? 3 : 0, 
-                  top: corner.startsWith('top') ? -3 : undefined, 
-                  bottom: corner.startsWith('bottom') ? -3 : undefined, 
-                  left: corner.endsWith('Left') ? -3 : undefined, 
-                  right: corner.endsWith('Right') ? -3 : undefined, 
-                }} /> 
-              ))} 
-            </Animated.View> 
-          </View> 
-      
-          {/* Progress bar + bottom controls */} 
-          <View style={{ 
-            backgroundColor: 'rgba(0,0,0,0.6)', 
-            paddingHorizontal: 24, 
-            paddingBottom: 48, 
-            paddingTop: 16, 
-          }}> 
-            {/* Progress bar */} 
-            {(scanPhase === 'scanning' || scanPhase === 'processing') && ( 
-              <View style={{ marginBottom: 20 }}> 
-                <View style={{ 
-                  height: 4, 
-                  backgroundColor: 'rgba(255,255,255,0.2)', 
-                  borderRadius: 2, 
-                  overflow: 'hidden', 
-                }}> 
-                  <View style={{ 
-                    height: '100%', 
-                    width: `${scanProgress}%`, 
-                    backgroundColor: '#D4AF37', 
-                    borderRadius: 2, 
-                  }} /> 
-                </View> 
-                <Text style={{ color: '#D4AF37', fontSize: 12, marginTop: 6, textAlign: 'right' }}> 
-                  {scanProgress}% 
-                </Text> 
-              </View> 
-            )} 
-      
-            {/* Buttons */} 
-            {scanPhase === 'positioning' && ( 
-              <TouchableOpacity 
-                style={{ 
-                  backgroundColor: '#D4AF37', 
-                  borderRadius: 32, 
-                  paddingVertical: 16, 
-                  alignItems: 'center', 
-                }} 
-                onPress={handleCaptureScan} 
-              > 
-                <Text style={{ color: '#000', fontSize: 16, fontWeight: '700' }}> 
-                  Scan My Measurements 
-                </Text> 
-              </TouchableOpacity> 
-            )} 
-      
-            {(scanPhase === 'scanning' || scanPhase === 'processing') && ( 
-              <View style={{ 
-                borderRadius: 32, 
-                paddingVertical: 16, 
-                alignItems: 'center', 
-                borderWidth: 1, 
-                borderColor: 'rgba(255,255,255,0.2)', 
-              }}> 
-                <ActivityIndicator color="#D4AF37" size="small" /> 
-                <Text style={{ color: '#fff', fontSize: 14, marginTop: 8, opacity: 0.7 }}> 
-                  Please hold still... 
-                 </Text> 
-              </View> 
-            )} 
-      
-            {scanPhase === 'done' && ( 
-              <View style={{ gap: 12 }}> 
-                <Text style={{ 
-                  color: '#D4AF37', 
-                  fontSize: 16, 
-                  fontWeight: '700', 
-                  textAlign: 'center', 
-                  marginBottom: 4, 
-                }}> 
-                  ✓ Measurements Saved! 
-                </Text> 
-                <TouchableOpacity 
-                  style={{ 
-                    backgroundColor: '#D4AF37', 
-                    borderRadius: 32, 
-                    paddingVertical: 14, 
-                    alignItems: 'center', 
-                  }} 
-                  onPress={() => { 
-                    setScannerVisible(false); 
-                    setScanPhase('idle'); 
-                    scanLineAnim.setValue(0); 
-                    pulseAnim.setValue(1); 
-                  }} 
-                > 
-                  <Text style={{ color: '#000', fontSize: 15, fontWeight: '700' }}> 
-                    View My Measurements 
-                  </Text> 
-                </TouchableOpacity> 
-              </View> 
-            )} 
-      
-            {scanPhase === 'positioning' && ( 
-              <TouchableOpacity 
-                style={{ marginTop: 12, alignItems: 'center' }} 
-                onPress={() => { 
-                  setScannerVisible(false); 
-                  setScanPhase('idle'); 
-                }} 
-              > 
-                <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>Cancel</Text> 
-              </TouchableOpacity> 
-            )} 
-          </View> 
-        </View> 
-      </Modal>
 
       {/* Hamburger Menu */}
       <HamburgerMenu

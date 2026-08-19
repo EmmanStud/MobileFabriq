@@ -18,6 +18,9 @@ import Profile from './screens/Profile';
 import VerifyEmail from './screens/VerifyEmail'; 
 import Notifications from './screens/Notifications'; 
 import GownDesigner3D from './screens/GownDesigner3D'; 
+import MeasurementHeightInput from './screens/MeasurementHeightInput';
+import MeasurementCamera from './screens/MeasurementCamera';
+import MeasurementPreview from './screens/MeasurementPreview';
  
 const Stack = createNativeStackNavigator(); 
 const POLL_INTERVAL_MS = 30000; 
@@ -150,6 +153,9 @@ export default function App() {
                 <Profile {...props} onLogout={handleLogout} unreadCount={unreadCount} /> 
               )} 
             </Stack.Screen> 
+            <Stack.Screen name="MeasurementHeightInput" component={MeasurementHeightInput} />
+            <Stack.Screen name="MeasurementCamera" component={MeasurementCamera} />
+            <Stack.Screen name="MeasurementPreview" component={MeasurementPreview} />
             <Stack.Screen name="VerifyEmail" component={VerifyEmail} /> 
             <Stack.Screen name="Notifications"> 
               {(props) => ( 
