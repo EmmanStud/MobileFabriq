@@ -767,13 +767,13 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
                         <Text>Reschedule</Text>
                       </TouchableOpacity>
                       <TouchableOpacity 
-                        style={[styles.actionBtn, { borderColor: '#FCA5A5' }]}
+                        style={[styles.actionBtn, { borderColor: '#FCD34D', backgroundColor: '#FFF7ED' }]}
                         onPress={() => {
                           setCancelAppointmentId(appointment.id);
                           setShowCancelConfirm(true);
                         }}
                       >
-                        <Text style={{ color: '#DC2626' }}>Cancel</Text>
+                        <Text style={{ color: '#B45309', fontWeight: '600' }}>Need to cancel?</Text>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -1170,15 +1170,16 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
       <Modal visible={showCancelConfirm} transparent animationType="fade" onRequestClose={() => setShowCancelConfirm(false)}>
         <View style={styles.modalOverlayCentered}>
           <View style={styles.branchModalCard}>
-            <Text style={styles.branchModalTitle}>Cancel Appointment</Text>
-            <Text style={{ color: '#6B5D4F', textAlign: 'center', marginBottom: 16, fontSize: 14 }}>
-              To cancel your appointment, please contact us directly:{"\n\n"}
+            <Text style={styles.branchModalTitle}>Appointment Cancellation</Text>
+            <Text style={{ color: '#6B5D4F', textAlign: 'center', marginBottom: 16, fontSize: 14, lineHeight: 22 }}>
+              Appointments cannot be cancelled directly in this app.{"\n\n"}
+              Please contact the boutique or your branch directly to request a cancellation.{"\n\n"}
+              Your appointment remains active until the cancellation is processed through the proper staff/admin workflow.{"\n\n"}
               📞 +63 912 345 6789{"\n"}
-              📧 hello@hannahvanessa.com{"\n\n"}
-              Our team will process your cancellation request.
+              📧 hello@hannahvanessa.com
             </Text>
             <TouchableOpacity style={styles.confirmBtn} onPress={() => setShowCancelConfirm(false)}>
-              <Text style={styles.confirmBtnText}>OK, Got it</Text>
+              <Text style={styles.confirmBtnText}>Contact Us</Text>
             </TouchableOpacity>
           </View>
         </View>

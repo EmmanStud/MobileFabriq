@@ -427,15 +427,76 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
   const calculateDownpayment = () => Math.floor(calculateTotalPrice() / 2);
 
   // --- Validation ---
+  const isMissingPickupBranch = (branchValue) => {
+    if (branchValue === null || branchValue === undefined) return true;
+    if (typeof branchValue === 'string' && branchValue.trim() === '') return true;
+    return !branchOptions.includes(branchValue);
+  };
+
+  const isRentalDateRangeValid = (startDateString, endDateString, datesUnavailable = []) => {
+    if (!startDateString || !endDateString) return false;
+
+    const startDate = parseLocalDateString(startDateString);
+    const endDate = parseLocalDateString(endDateString);
+
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return false;
+    if (endDate <= startDate) return false;
+    if (datesUnavailable.includes(startDateString)) return false;
+    if (datesUnavailable.includes(endDateString)) return false;
+
+    const current = new Date(startDate);
+    while (current <= endDate) {
+      const currentStr = getLocalDateString(current);
+      if (datesUnavailable.includes(currentStr)) return false;
+      current.setDate(current.getDate() + 1);
+    }
+
+    return true;
+  };
+
+  const isStep2Valid = () => {
+    const hasValidStartDate = !!formData.startDateString && !unavailableDates.includes(formData.startDateString);
+    const hasValidEndDate = !!formData.endDateString && !unavailableDates.includes(formData.endDateString);
+    const hasValidRange = isRentalDateRangeValid(formData.startDateString, formData.endDateString, unavailableDates);
+    const hasValidBranch = !isMissingPickupBranch(formData.branch);
+    return hasValidStartDate && hasValidEndDate && hasValidRange && hasValidBranch;
+  };
+
   const validateStep = (step) => {
     const errors = {};
     if (step === 1 && !selectedGown) {
       errors.gown = 'Please select a gown from the catalog first';
     }
     if (step === 2) {
-      if (!formData.startDateString) errors.startDate = 'Start date is required';
-      if (!formData.endDateString) errors.endDate = 'End date is required';
-      if (formData.endDate <= formData.startDate) errors.endDate = 'End date must be after start date';
+      if (!formData.startDateString) {
+        errors.startDate = 'Start date is required';
+      } else if (unavailableDates.includes(formData.startDateString)) {
+        errors.startDate = 'Selected start date is unavailable for this gown';
+      }
+
+      if (!formData.endDateString) {
+        errors.endDate = 'End date is required';
+      } else if (unavailableDates.includes(formData.endDateString)) {
+        errors.endDate = 'Selected end date is unavailable for this gown';
+      }
+
+      if (formData.startDateString && formData.endDateString && formData.endDate <= formData.startDate) {
+        errors.endDate = 'End date must be after start date';
+      }
+
+      if (
+        formData.startDateString &&
+        formData.endDateString &&
+        !errors.startDate &&
+        !errors.endDate &&
+        !isRentalDateRangeValid(formData.startDateString, formData.endDateString, unavailableDates)
+      ) {
+        errors.endDate = 'Some dates in your selected range are unavailable for this gown.';
+      }
+
+      if (isMissingPickupBranch(formData.branch)) {
+        errors.branch = 'Please select a pickup branch.';
+      }
     }
     if (step === 3 && !personalInfo.contactNumber.trim()) {
       errors.contactNumber = 'Contact number is required';
@@ -445,7 +506,42 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
     return true;
   };
 
-  const goToNextStep = () => { 
+  const goToNextStep = () => {
+    if (formStep === 2 && !isStep2Valid()) {
+      const nextError = {};
+      if (!formData.startDateString) nextError.startDate = 'Start date is required';
+      else if (unavailableDates.includes(formData.startDateString)) nextError.startDate = 'Selected start date is unavailable for this gown';
+
+      if (!formData.endDateString) nextError.endDate = 'End date is required';
+      else if (unavailableDates.includes(formData.endDateString)) nextError.endDate = 'Selected end date is unavailable for this gown';
+
+      if (formData.startDateString && formData.endDateString && formData.endDate <= formData.startDate) {
+        nextError.endDate = 'End date must be after start date';
+      }
+
+      if (
+        formData.startDateString &&
+        formData.endDateString &&
+        !nextError.startDate &&
+        !nextError.endDate &&
+        !isRentalDateRangeValid(formData.startDateString, formData.endDateString, unavailableDates)
+      ) {
+        nextError.endDate = 'Some dates in your selected range are unavailable for this gown.';
+      }
+
+      if (isMissingPickupBranch(formData.branch)) {
+        nextError.branch = 'Please select a pickup branch.';
+      }
+
+      setValidationErrors(nextError);
+      if (nextError.branch) {
+        showRentalAlert('Pickup Branch Required', 'Please select a pickup branch.');
+      } else if (nextError.endDate || nextError.startDate) {
+        showRentalAlert('Rental Details Invalid', nextError.endDate || nextError.startDate);
+      }
+      return;
+    }
+
     if (validateStep(formStep)) {
       if (formStep === 1) {
         fetchAvailability(authToken, selectedGown?.id, formData.startDateString, formData.endDateString);
@@ -726,7 +822,16 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
                             <Text style={styles.dateInputText}>{formData.startDateString}</Text>
                           </View>
                         </TouchableOpacity>
-                        {validationErrors.startDate && <Text style={styles.errorMessage}>{validationErrors.startDate}</Text>}
+                        {validationErrors.startDate && (
+                          <View style={[styles.availabilityWarningBox, styles.availabilityWarningError]}>
+                            <View style={styles.availabilityWarningIconWrap}>
+                              <Text style={styles.availabilityWarningIcon}>⚠</Text>
+                            </View>
+                            <View style={styles.availabilityWarningTextWrap}>
+                              <Text style={styles.availabilityWarningTitle}>{validationErrors.startDate}</Text>
+                            </View>
+                          </View>
+                        )}
                         {Platform.OS !== 'web' && (
                           <DateTimePickerModal
                             isVisible={showStartDatePicker}
@@ -756,7 +861,16 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
                             <Text style={styles.dateInputText}>{formData.endDateString}</Text>
                           </View>
                         </TouchableOpacity>
-                        {validationErrors.endDate && <Text style={styles.errorMessage}>{validationErrors.endDate}</Text>}
+                        {validationErrors.endDate && (
+                          <View style={[styles.availabilityWarningBox, styles.availabilityWarningError]}>
+                            <View style={styles.availabilityWarningIconWrap}>
+                              <Text style={styles.availabilityWarningIcon}>⚠</Text>
+                            </View>
+                            <View style={styles.availabilityWarningTextWrap}>
+                              <Text style={styles.availabilityWarningTitle}>{validationErrors.endDate}</Text>
+                            </View>
+                          </View>
+                        )}
                         {Platform.OS !== 'web' && (
                           <DateTimePickerModal
                             isVisible={showEndDatePicker}
@@ -780,23 +894,40 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
                       </View>
                     </View>
 
-                    {availabilityLoading && ( 
-                      <Text style={{ color: '#6B5D4F', fontSize: 12, marginTop: 4 }}>Checking availability...</Text> 
-                    )} 
-                    {!availabilityLoading && unavailableDates.length > 0 && ( 
-                      <View style={{ backgroundColor: '#fee2e2', borderRadius: 8, padding: 10, marginTop: 8 }}> 
-                        <Text style={{ color: '#dc2626', fontWeight: '600', fontSize: 13 }}> 
-                          ⚠️ Some dates in your range are unavailable for this gown. 
-                        </Text> 
-                        <Text style={{ color: '#991b1b', fontSize: 12, marginTop: 4 }}> 
-                          Unavailable: {unavailableDates.join(', ')} 
-                        </Text> 
-                      </View> 
-                    )} 
-                    {!availabilityLoading && unavailableDates.length === 0 && formData.startDateString && ( 
-                      <Text style={{ color: '#16a34a', fontSize: 12, marginTop: 4, fontWeight: '600' }}> 
-                        ✓ Dates are available 
-                      </Text> 
+                    {availabilityLoading && (
+                      <View style={[styles.availabilityWarningBox, styles.availabilityWarningInfo]}>
+                        <View style={styles.availabilityWarningIconWrap}>
+                          <Text style={styles.availabilityWarningIcon}>⟳</Text>
+                        </View>
+                        <View style={styles.availabilityWarningTextWrap}>
+                          <Text style={styles.availabilityWarningTitle}>Checking availability...</Text>
+                        </View>
+                      </View>
+                    )}
+                    {!availabilityLoading && unavailableDates.length > 0 && (
+                      <View style={[styles.availabilityWarningBox, styles.availabilityWarningWarning]}>
+                        <View style={styles.availabilityWarningIconWrap}>
+                          <Text style={styles.availabilityWarningIcon}>⚠</Text>
+                        </View>
+                        <View style={styles.availabilityWarningTextWrap}>
+                          <Text style={styles.availabilityWarningTitle}>
+                            Some dates in your range are unavailable for this gown.
+                          </Text>
+                          <Text style={styles.availabilityWarningList}>
+                            Unavailable: {unavailableDates.join(', ')}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                    {!availabilityLoading && unavailableDates.length === 0 && formData.startDateString && (
+                      <View style={[styles.availabilityWarningBox, styles.availabilityWarningSuccess]}>
+                        <View style={styles.availabilityWarningIconWrap}>
+                          <Text style={styles.availabilityWarningIcon}>✓</Text>
+                        </View>
+                        <View style={styles.availabilityWarningTextWrap}>
+                          <Text style={styles.availabilityWarningTitle}>Dates are available.</Text>
+                        </View>
+                      </View>
                     )}
 
                     {/* Web Calendar Modal */}
@@ -925,6 +1056,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
                           ))}
                         </ScrollView>
                       </View>
+                      {validationErrors.branch && <Text style={styles.errorMessage}>{validationErrors.branch}</Text>}
                     </View>
                   </View>
                 )}
@@ -1021,9 +1153,15 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity
-                    style={[styles.submitBtn, formStep < 4 && styles.nextStepBtn, submitting && { opacity: 0.6 }]}
+                    style={[
+                      styles.submitBtn,
+                      formStep < 4 && styles.nextStepBtn,
+                      submitting || (formStep === 1 && !selectedGown) || (formStep === 2 && !isStep2Valid()) || (formStep === 3 && !personalInfo.contactNumber.trim())
+                        ? { opacity: 0.6 }
+                        : null,
+                    ]}
                     onPress={formStep === 4 ? handleSubmit : goToNextStep}
-                    disabled={submitting}
+                    disabled={submitting || (formStep === 1 && !selectedGown) || (formStep === 2 && !isStep2Valid()) || (formStep === 3 && !personalInfo.contactNumber.trim())}
                   >
                     {submitting ? (
                       <ActivityIndicator size="small" color="#fff" />
@@ -1448,6 +1586,58 @@ const styles = StyleSheet.create({
   inputError: { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
   inputDisabled: { opacity: 0.5, backgroundColor: '#f5f5f5', borderColor: '#ccc' },
   errorMessage: { fontSize: 11, color: '#dc2626', marginTop: 4, fontWeight: '500' },
+  availabilityWarningBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  availabilityWarningInfo: {
+    backgroundColor: '#f4f7ff',
+    borderColor: '#c7d2fe',
+  },
+  availabilityWarningWarning: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#f7c76e',
+  },
+  availabilityWarningError: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#f5b4b4',
+  },
+  availabilityWarningSuccess: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#9fe3b8',
+  },
+  availabilityWarningIconWrap: {
+    width: 18,
+    alignItems: 'center',
+    marginRight: 8,
+    paddingTop: 2,
+  },
+  availabilityWarningIcon: {
+    color: '#b45309',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  availabilityWarningTextWrap: {
+    flex: 1,
+  },
+  availabilityWarningTitle: {
+    color: '#92400e',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  availabilityWarningList: {
+    color: '#7c2d12',
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
+  },
 
   // Dates
   dateInputContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
