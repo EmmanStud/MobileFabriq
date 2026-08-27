@@ -1,13 +1,20 @@
 import React, { useEffect, useState } from 'react';
+import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
 import { API_URL } from '../services/apiConfig';
 
 export default function VerifyEmail({ navigation, route }) {
+  const { setChatHidden } = useChatVisibility();
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [timeLeft, setTimeLeft] = useState(0);
+
+  useEffect(() => {
+    setChatHidden(true);
+    return () => setChatHidden(false);
+  }, [setChatHidden]);
   const email = route?.params?.email || '';
 
   useEffect(() => {
@@ -37,14 +44,14 @@ export default function VerifyEmail({ navigation, route }) {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/auth/verify-signup`, {
+      const response = await fetch(`${API_URL}/auth/signup/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code: trimmedCode }),
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error || data.message || 'Verification failed');
+        setError(data.message || data.error || 'Verification failed');
         return;
       }
 
@@ -69,10 +76,10 @@ export default function VerifyEmail({ navigation, route }) {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/auth/resend-verification`, {
+      const response = await fetch(`${API_URL}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify(route?.params?.signupPayload || {}),
       });
       const data = await response.json();
       if (!response.ok) {

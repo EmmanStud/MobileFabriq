@@ -3,8 +3,12 @@ import {
   View,
   Text,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   ScrollView,
   StyleSheet,
 } from 'react-native';
@@ -24,6 +28,7 @@ export default function EditProfileModal({
   onSave,
   isLoading,
   onShowAlert,
+  authToken,
 }) {
   // Safe validator assignment with fallbacks
   const validateFirstName = validators?.firstName || (() => '');
@@ -203,24 +208,22 @@ export default function EditProfileModal({
     try {
       setVerifyingPassword(true);
       
-      // Send plain password - backend uses bcrypt for verification
-      const userEmail = encodeURIComponent(customerData?.email?.toLowerCase() || '');
-
-      const response = await fetch(`${API_CONFIG.BASE_URL}/users/${userEmail}/verify-password`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/verify-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
         },
         body: JSON.stringify({
-          password: pwd,  // Send plain password, not hashed
+          currentPassword: pwd,
         }),
       });
 
       const result = await response.json();
       
       if (response.ok) {
-        setOldPasswordCorrect(result.isCorrect);
-        console.log('[DEBUG] Password verification:', result.isCorrect ? '✓ Correct' : '✗ Incorrect');
+        setOldPasswordCorrect(result.isValid);
+        console.log('[DEBUG] Password verification:', result.isValid ? '✓ Correct' : '✗ Incorrect');
       } else {
         console.error('Password verification error:', result.error);
         setOldPasswordCorrect(null);
@@ -242,6 +245,13 @@ export default function EditProfileModal({
     // If password section is shown, validate passwords too
     if (showPasswordSection && (oldPassword || newPassword || confirmPassword)) {
       if (!validatePassword()) {
+        return;
+      }
+
+      if (oldPasswordCorrect !== true) {
+        if (typeof onShowAlert === 'function') {
+          onShowAlert('Error', 'Please enter your current password correctly before saving.');
+        }
         return;
       }
     }
@@ -270,6 +280,9 @@ export default function EditProfileModal({
 
     try {
       await onSave(updatedData);
+      if (updatedData.oldPassword && updatedData.newPassword) {
+        return;
+      }
       if (typeof onShowAlert === 'function') {
         onShowAlert('Success', 'Profile updated successfully', () => onClose());
       }
@@ -300,8 +313,14 @@ export default function EditProfileModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent={true}>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        enabled={true}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
           {/* Header */}
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Edit Profile</Text>
@@ -310,7 +329,12 @@ export default function EditProfileModal({
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.formContainer}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.formContainer}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          >
             {/* First Name */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>First Name</Text>
@@ -654,8 +678,10 @@ export default function EditProfileModal({
               </TouchableOpacity>
             </View>
           </ScrollView>
-        </View>
-      </View>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

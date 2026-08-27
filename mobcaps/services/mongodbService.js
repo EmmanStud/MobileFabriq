@@ -19,6 +19,7 @@
 
 import { Platform } from 'react-native';
 import { API_URL, fetchAPI } from './apiConfig';
+import { sessionService } from './sessionService';
 
 // ============================================
 // MongoDB Database Service
@@ -729,11 +730,19 @@ export const mongodbService = {
 
   async getBodyMeasurements(customerId) {
     try {
-      if (!MONGODB_API_URL || !customerId) return null;
-      const response = await fetchAPI(`/body-measurement/${encodeURIComponent(customerId)}`);
+      const session = await sessionService.getSession();
+      if (!MONGODB_API_URL || !customerId || !session?.token) return null;
+      const response = await fetchAPI('/customers/measurements', {
+        headers: { Authorization: `Bearer ${session.token}` },
+      });
       const data = await response.json().catch(() => null);
-      if (response.ok && data?.success === true) {
-        return data.profile || null;
+      if (response.ok) {
+        return {
+          ...data,
+          chest: data?.chest ?? data?.bust ?? null,
+          armLength: data?.armLength ?? data?.sleeveLength ?? null,
+          measuredAt: data?.measuredAt || data?.updatedAt || null,
+        };
       }
       return null;
     } catch (err) {

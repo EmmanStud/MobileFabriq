@@ -16,6 +16,7 @@ import Header from '../components/Header';
 import EditProfileModal from '../components/EditProfileModal';
 import CustomAlertModal from '../components/CustomAlertModal';
 import { sessionService } from '../services/sessionService';
+import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 import { mongodbService } from '../services/mongodbService';
 import { API_CONFIG } from '../services/apiConfig';
 
@@ -49,6 +50,7 @@ const deriveNameParts = (source = {}) => {
 };
 
 export default function Profile({ navigation, route, onLogout, unreadCount = 0 }) {
+  const { setChatHidden } = useChatVisibility();
   const [menuVisible, setMenuVisible] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -78,6 +80,11 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isEditLoading, setIsEditLoading] = useState(false);
+
+  useEffect(() => {
+    setChatHidden(menuVisible || isEditModalOpen);
+    return () => setChatHidden(false);
+  }, [menuVisible, isEditModalOpen, setChatHidden]);
 
   const [alertConfig, setAlertConfig] = useState({
     visible: false,
@@ -134,6 +141,11 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
 
   const [measurements, setMeasurements] = useState({ measuredAt: null });
   const [measurementsLoading, setMeasurementsLoading] = useState(false);
+  const [isMeasurementsEditMode, setIsMeasurementsEditMode] = useState(false);
+  const [draftMeasurements, setDraftMeasurements] = useState({});
+  const [measurementsSaving, setMeasurementsSaving] = useState(false);
+  const [measurementsMessage, setMeasurementsMessage] = useState('');
+  const [measurementsError, setMeasurementsError] = useState('');
 
   const [favorites, setFavorites] = useState([]); 
   const [favoritesLoading, setFavoritesLoading] = useState(false);
@@ -247,12 +259,75 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
       const data = await mongodbService.getBodyMeasurements(customerId);
       if (data) { 
         setMeasurements(data);
+        if (!isMeasurementsEditMode) setDraftMeasurements(data);
       } 
     } catch (err) { 
       console.warn('fetchMeasurements error:', err); 
     } finally { 
       setMeasurementsLoading(false); 
     } 
+  };
+
+  const measurementFields = [
+    { key: 'shoulderWidth', label: 'Shoulder Width', min: 0.1, max: 300 },
+    { key: 'chest', label: 'Chest', min: 0.1, max: 300 },
+    { key: 'waist', label: 'Waist', min: 0.1, max: 300 },
+    { key: 'hips', label: 'Hips', min: 0.1, max: 300 },
+    { key: 'armLength', label: 'Arm Length', min: 0.1, max: 300 },
+    { key: 'inseam', label: 'Inseam', min: 0.1, max: 300 },
+    { key: 'torsoLength', label: 'Torso Length', min: 0.1, max: 300 },
+    { key: 'neck', label: 'Neck', min: 0.1, max: 300 },
+    { key: 'height', label: 'Height', min: 100, max: 250 },
+  ];
+
+  const startMeasurementsEdit = () => {
+    setDraftMeasurements({ ...measurements });
+    setMeasurementsMessage('');
+    setMeasurementsError('');
+    setIsMeasurementsEditMode(true);
+  };
+
+  const cancelMeasurementsEdit = () => {
+    setDraftMeasurements({ ...measurements });
+    setMeasurementsMessage('');
+    setMeasurementsError('');
+    setIsMeasurementsEditMode(false);
+  };
+
+  const saveMeasurements = async () => {
+    const payload = {};
+    for (const field of measurementFields) {
+      const rawValue = String(draftMeasurements[field.key] ?? '').trim();
+      if (!rawValue) {
+        payload[field.key] = null;
+        continue;
+      }
+      if (!/^\d+(\.\d+)?$/.test(rawValue)) {
+        setMeasurementsError(`${field.label} must contain numbers only.`);
+        return;
+      }
+      const numericValue = Number(rawValue);
+      if (!Number.isFinite(numericValue) || numericValue < field.min || numericValue > field.max) {
+        setMeasurementsError(`${field.label} must be between ${field.min} and ${field.max} cm.`);
+        return;
+      }
+      payload[field.key] = numericValue;
+    }
+
+    setMeasurementsSaving(true);
+    setMeasurementsMessage('');
+    setMeasurementsError('');
+    try {
+      const result = await mongodbService.updateMeasurements(payload, authToken);
+      if (!result.success) throw new Error(result.error || 'Failed to save measurements.');
+      await fetchMeasurements();
+      setIsMeasurementsEditMode(false);
+      setMeasurementsMessage('Measurements saved successfully.');
+    } catch (error) {
+      setMeasurementsError(error.message || 'Could not save measurements.');
+    } finally {
+      setMeasurementsSaving(false);
+    }
   };
 
   const fetchFavorites = async (token) => { 
@@ -852,32 +927,49 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
                       <Text style={styles.measurementsDate}>No measurements saved yet</Text> 
                     )} 
                   </View> 
+                  {!isMeasurementsEditMode && (
+                    <TouchableOpacity style={styles.manualEntryBtn} onPress={startMeasurementsEdit}>
+                      <Text style={styles.manualEntryBtnText}>Edit</Text>
+                    </TouchableOpacity>
+                  )}
                 </View> 
            
                 {measurementsLoading ? ( 
                   <ActivityIndicator size="small" color="#D4AF37" style={{ marginVertical: 20 }} /> 
                 ) : ( 
                   <View style={styles.measurementsGrid}> 
-                    {[ 
-                      { key: 'shoulderWidth', label: 'Shoulder Width' },
-                      { key: 'chest', label: 'Chest' },
-                      { key: 'waist', label: 'Waist' }, 
-                      { key: 'hips', label: 'Hips' }, 
-                      { key: 'armLength', label: 'Arm Length' },
-                      { key: 'inseam', label: 'Inseam' },
-                      { key: 'torsoLength', label: 'Torso Length' },
-                      { key: 'neck', label: 'Neck' },
-                      { key: 'height', label: 'Height' }, 
-                    ].map(({ key, label }) => ( 
+                    {measurementFields.map(({ key, label }) => (
                       <View key={key} style={styles.measurementItem}> 
                         <Text style={styles.measurementLabel}>{label}</Text> 
-                        <Text style={styles.measurementValue}> 
-                          {typeof measurements[key] === 'number' && Number.isFinite(measurements[key]) ? `${measurements[key]} cm` : 'Unavailable'}
-                        </Text> 
+                        {isMeasurementsEditMode ? (
+                          <TextInput
+                            style={styles.measurementInput}
+                            value={String(draftMeasurements[key] ?? '')}
+                            onChangeText={(value) => setDraftMeasurements(prev => ({ ...prev, [key]: value.replace(/[^0-9.]/g, '') }))}
+                            keyboardType="decimal-pad"
+                            placeholder="0"
+                          />
+                        ) : (
+                          <Text style={styles.measurementValue}>
+                            {typeof measurements[key] === 'number' && Number.isFinite(measurements[key]) ? `${measurements[key]} cm` : 'Unavailable'}
+                          </Text>
+                        )}
                       </View> 
                     ))} 
                   </View> 
                 )} 
+                {measurementsMessage ? <Text style={styles.measurementsSuccess}>{measurementsMessage}</Text> : null}
+                {measurementsError ? <Text style={styles.measurementsError}>{measurementsError}</Text> : null}
+                {isMeasurementsEditMode && (
+                  <View style={styles.measurementsActions}>
+                    <TouchableOpacity style={styles.measurementsCancelBtn} onPress={cancelMeasurementsEdit} disabled={measurementsSaving}>
+                      <Text style={styles.measurementsCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.measurementsSaveBtn} onPress={saveMeasurements} disabled={measurementsSaving}>
+                      <Text style={styles.measurementsSaveText}>{measurementsSaving ? 'Saving...' : 'Save'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View> 
             </View> 
           )} 
@@ -989,6 +1081,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
           onSave={handleSaveProfile}
           isLoading={isEditLoading}
           onShowAlert={showCustomAlert}
+          authToken={authToken}
         />
       )}
      
@@ -1280,6 +1373,39 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     color: '#333',
   },
+  measurementInput: {
+    borderWidth: 1,
+    borderColor: '#D4AF37',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 16,
+    color: '#333',
+    backgroundColor: '#fff',
+  },
+  measurementsActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 16,
+  },
+  measurementsCancelBtn: {
+    borderWidth: 1,
+    borderColor: '#E8DCC8',
+    borderRadius: 18,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+  },
+  measurementsCancelText: { color: '#6B5D4F', fontWeight: '600' },
+  measurementsSaveBtn: {
+    backgroundColor: '#000',
+    borderRadius: 18,
+    paddingVertical: 9,
+    paddingHorizontal: 18,
+  },
+  measurementsSaveText: { color: '#fff', fontWeight: '600' },
+  measurementsSuccess: { color: '#16794D', fontSize: 13, marginTop: 14 },
+  measurementsError: { color: '#B42318', fontSize: 13, marginTop: 14 },
   favoritesHeader: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { X, ShoppingBag, Calendar, Ruler, User } from 'lucide-react-native';
+import CustomAlertModal from './CustomAlertModal';
 
 // Local Assets
 import FabriQLogo from '../assets/FabriQLogo.png';
@@ -29,6 +30,8 @@ export default function HamburgerMenu({
   currentRoute,
   styles,
 }) {
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
   // Provide safe defaults for callbacks to avoid undefined calls
   const safeOnClose = typeof onClose === 'function' ? onClose : () => {};
   const safeOnNavigate = typeof onNavigate === 'function' ? onNavigate : () => {};
@@ -46,7 +49,8 @@ export default function HamburgerMenu({
   };
 
   return (
-    <Modal visible={!!visible} animationType="fade" transparent={true}>
+    <>
+      <Modal visible={!!visible} animationType="fade" transparent={true}>
       <TouchableOpacity 
         style={mergedStyles.modalOverlay}
         activeOpacity={1}
@@ -133,10 +137,7 @@ export default function HamburgerMenu({
             {isLoggedIn && (
               <TouchableOpacity 
                 style={[mergedStyles.navRow, mergedStyles.logoutRow]} 
-                onPress={() => {
-                  safeOnClose();
-                  safeOnLogout();
-                }}
+                onPress={() => setShowLogoutConfirm(true)}
               >
                 <X size={18} color="#D9534F" />
                 <Text style={[mergedStyles.navText, mergedStyles.logoutText]}>LOGOUT</Text>
@@ -145,7 +146,23 @@ export default function HamburgerMenu({
           </View>
         </View>
       </TouchableOpacity>
-    </Modal>
+      </Modal>
+
+      <CustomAlertModal
+        visible={showLogoutConfirm}
+        mode="confirm"
+        title="Log Out"
+        message="Are you sure you want to log out?"
+        confirmText="Log Out"
+        cancelText="Cancel"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          safeOnClose();
+          safeOnLogout();
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
+    </>
   );
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   SafeAreaView, ActivityIndicator, Dimensions,
@@ -10,6 +10,7 @@ import {
   ShoppingBag, Zap,
 } from 'lucide-react-native';
 import { buildGownPrompt, submitGownGeneration, pollGownTask } from '../services/meshyService';
+import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const LOCAL_SERVER = 'fabriq-3d-server-production.up.railway.app';
@@ -142,8 +143,10 @@ const formatPeso = (amount) =>
 // ─── MAIN SCREEN ─────────────────────────────────────────────────────────────
 
 export default function GownDesigner3D({ navigation, route }) {
+  const { setChatHidden } = useChatVisibility();
   const { onDesignComplete } = route.params || {};
   const colorPreviewRef = useRef(null);
+  const fabricPreviewRef = useRef(null);
   const generatedWebViewRef = useRef(null);
 
   const [step, setStep] = useState(1); // 1=silhouette, 2=color, 3=fabric, 4=addons, 5=preview
@@ -162,6 +165,11 @@ export default function GownDesigner3D({ navigation, route }) {
   const [pendingColorForGenerated, setPendingColorForGenerated] = useState(null);
   const [genError, setGenError] = useState(null);
 
+  useEffect(() => {
+    setChatHidden(true);
+    return () => setChatHidden(false);
+  }, [setChatHidden]);
+
   // Computed
   const totalCost = calculateTotal(design);
   const stepProgress = (step / 5) * 100;
@@ -179,10 +187,10 @@ export default function GownDesigner3D({ navigation, route }) {
     });
   };
 
-  const sendColorToViewer = (hex) => {
+  const sendColorToViewer = (hex, targetRef = colorPreviewRef) => {
     console.log('[RN] sendColorToViewer called with:', hex);
-    if (!colorPreviewRef?.current) {
-      console.log('[RN] ERROR: colorPreviewRef is null');
+    if (!targetRef?.current) {
+      console.log('[RN] ERROR: target ref is null');
       return;
     }
     if (!hex) {
@@ -199,8 +207,21 @@ export default function GownDesigner3D({ navigation, route }) {
         true;
       })();
     `;
-    colorPreviewRef.current.injectJavaScript(js);
+    targetRef.current.injectJavaScript(js);
     console.log('[RN] injectJavaScript fired');
+  };
+
+  const sendFabricToViewer = (fabricId) => {
+    if (!fabricPreviewRef?.current || !fabricId) return;
+    const js = `
+      (function() {
+        if (typeof window.applyFabric === 'function') {
+          window.applyFabric('${fabricId}');
+        }
+        true;
+      })();
+    `;
+    fabricPreviewRef.current.injectJavaScript(js);
   };
 
   // ── Generate 3D ──
@@ -427,13 +448,45 @@ export default function GownDesigner3D({ navigation, route }) {
         <Text style={s.stepSubtitle}>The material that brings your vision to life</Text>
       </View>
 
+      <View style={s.liveViewerBox}>
+        <View style={s.liveViewerTopBar}>
+          <View style={[s.liveColorIndicator, { backgroundColor: design.color?.hex || '#E8DCC8' }]} />
+          <Text style={s.liveColorName}>{design.fabric?.name || 'Select a fabric below'}</Text>
+          <Text style={s.liveViewerHint}>Drag to rotate</Text>
+        </View>
+        <WebView
+          ref={fabricPreviewRef}
+          source={{ uri: `${LOCAL_SERVER}/viewer?url=${encodeURIComponent(design.silhouette?.modelUrl || '')}` }}
+          style={s.liveWebview}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          allowsInlineMediaPlayback={true}
+          mediaPlaybackRequiresUserAction={false}
+          mixedContentMode="always"
+          originWhitelist={['*']}
+          scrollEnabled={false}
+          onLoadEnd={() => {
+            setTimeout(() => {
+              if (design.color?.hex) sendColorToViewer(design.color.hex, fabricPreviewRef);
+              if (design.fabric?.id) sendFabricToViewer(design.fabric.id);
+            }, 1000);
+            setTimeout(() => {
+              if (design.fabric?.id) sendFabricToViewer(design.fabric.id);
+            }, 2500);
+          }}
+        />
+      </View>
+
       {fabrics.map((f) => {
         const selected = design.fabric?.id === f.id;
         return (
           <TouchableOpacity
             key={f.id}
             style={[s.fabricCard, selected && s.fabricCardSelected]}
-            onPress={() => setDesign(prev => ({ ...prev, fabric: f }))}
+            onPress={() => {
+              setDesign(prev => ({ ...prev, fabric: f }));
+              sendFabricToViewer(f.id);
+            }}
             activeOpacity={0.8}
           >
             <View style={s.fabricLeft}>

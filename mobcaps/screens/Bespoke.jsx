@@ -20,13 +20,15 @@ import { Palette, Upload, Ruler, ChevronRight, CheckCircle2, Menu, X, ShoppingBa
 import Svg, { Path, Line, Circle, Defs, LinearGradient, RadialGradient, Stop, G } from 'react-native-svg';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as ImagePicker from 'expo-image-picker';
 //import * as FaceDetector from 'expo-face-detector';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { sessionService } from '../services/sessionService';
 import { mongodbService } from '../services/mongodbService';
-import { API_URL, API_CONFIG } from '../services/apiConfig';
+import { API_URL, API_CONFIG, fetchAPI } from '../services/apiConfig';
 import HamburgerMenu from '../components/HamburgerMenu';
 import Header from '../components/Header';
+import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 import { showAlert } from '../services/platformService';
 
 // Reusable color and fabric options
@@ -157,6 +159,7 @@ const COLOR_HEX_MAP = {
 };
 
 export default function Bespoke({ navigation, route, unreadCount = 0 }) {
+  const { setChatHidden } = useChatVisibility();
   const [activeTab, setActiveTab] = useState('new');
   const [menuVisible, setMenuVisible] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -363,7 +366,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
           .filter(g => g._id || g.id)
           .map(g => String(g._id || g.id))
           .slice(0, 12),
-        insightText: `${analysis.tone} skin with ${analysis.undertone} undertone. Best colors: ${(analysis.recommendedColors || []).slice(0, 3).join(', ')}`,
+        insightText: analysis.insight || '',
         branch: formData?.branch || null,
       };
 
@@ -399,120 +402,60 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
     try {
       setIsAnalyzing(true);
 
-      // Manipulate the image to sample the cheek area
-      // Cheek region = center-left area of a selfie (roughly 35-50% from left, 45-65% from top)
       const manipResult = await ImageManipulator.manipulateAsync(
         imageUri,
-        [
-          { resize: { width: 100, height: 100 } },
-          { crop: { originX: 25, originY: 40, width: 30, height: 20 } },
-        ],
-        { format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        [{ resize: { width: 800 } }],
+        { format: ImageManipulator.SaveFormat.JPEG, base64: true, compress: 0.7 }
       );
 
       if (!manipResult.base64) {
         throw new Error('Could not process image');
       }
 
-      const base64Data = manipResult.base64;
-      const binaryStr = atob(base64Data);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
+      const session = await sessionService.getSession();
+      const token = session?.token || authToken;
+
+      const response = await fetchAPI('/skin-analysis/analyze', {
+        method: 'POST',
+        timeout: 45000,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: JSON.stringify({
+          image: manipResult.base64,
+          mimeType: 'image/jpeg',
+        }),
+      });
+
+      const responseData = await response.json();
+      const analysis = responseData?.analysis;
+
+      if (!analysis?.imageSuitable) {
+        Alert.alert(
+          'Analysis Failed',
+          analysis?.reason || 'Could not analyze skin tone. Please try again with better lighting.'
+        );
+        return;
       }
-
-      let rSum = 0, gSum = 0, bSum = 0, count = 0;
-      const startOffset = Math.floor(bytes.length * 0.3);
-      const step = Math.max(1, Math.floor(bytes.length / 50));
-
-      for (let i = startOffset; i < bytes.length - 3; i += step) {
-        const val = bytes[i];
-        if (val > 40 && val < 250) {
-          rSum += val;
-          gSum += bytes[i + 1] || val;
-          bSum += bytes[i + 2] || val;
-          count++;
-        }
-      }
-
-      let r = count > 0 ? Math.round(rSum / count) : 180;
-      let g = count > 0 ? Math.round(gSum / count) : 140;
-      let b = count > 0 ? Math.round(bSum / count) : 110;
-
-      r = Math.min(255, Math.max(60, r));
-      g = Math.min(220, Math.max(40, g));
-      b = Math.min(200, Math.max(20, b));
-
-      const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-      let tone;
-      if (luminance > 200) tone = 'fair';
-      else if (luminance > 170) tone = 'light';
-      else if (luminance > 130) tone = 'medium';
-      else if (luminance > 100) tone = 'tan';
-      else tone = 'deep';
-
-      const rbDiff = r - b;
-      const rgDiff = r - g;
-      let undertone;
-      if (rbDiff > 30 && rgDiff < 40) undertone = 'warm';
-      else if (rbDiff < 10) undertone = 'cool';
-      else undertone = 'neutral';
-
-      const derivedHex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-      const recommendedColors = getRecommendedColors(tone, undertone);
 
       const analysisResult = {
-        tone,
-        undertone,
-        rgb: { r, g, b },
-        hex: derivedHex,
-        recommendedColors,
-        insight: getAIInsight(tone, undertone),
+        tone: analysis.skinTone,
+        undertone: analysis.undertone,
+        rgb: analysis.skinRgb,
+        hex: analysis.skinHex,
+        recommendedColors: analysis.recommendedColors,
+        insight: analysis.insightText,
       };
 
       setSkinAnalysis(analysisResult);
 
-      if (recommendedColors.length > 0) {
-        setFormData(prev => ({ ...prev, preferredColors: recommendedColors[0] }));
+      if (analysisResult.recommendedColors.length > 0) {
+        setFormData(prev => ({ ...prev, preferredColors: analysisResult.recommendedColors[0] }));
       }
 
-      const filtered = filterRecommendedGowns(allGowns, recommendedColors);
+      const filtered = filterRecommendedGowns(allGowns, analysisResult.recommendedColors);
       setRecommendedGowns(filtered);
 
-      // Save to color_anal collection — non-blocking
+      // Save the real analysis result to color_anal for admin analytics — non-blocking
       saveSkinAnalysisToDb(analysisResult, filtered);
-
-      // TEMP DEBUG — test if backend route exists
-      try {
-        const session = await sessionService.getSession();
-        const token = session?.token || authToken;
-        console.log('[DEBUG] Token exists:', !!token);
-        console.log('[DEBUG] API URL:', API_CONFIG.BASE_URL);
-
-        const testRes = await fetch(`${API_CONFIG.BASE_URL}/skin-analysis/save`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            skinTone: 'medium',
-            undertone: 'warm',
-            skinHex: '#C68642',
-            skinRgb: { r: 198, g: 134, b: 66 },
-            recommendedColors: ['Gold', 'Copper'],
-            recommendedGownIds: [],
-            insightText: 'Test',
-            branch: 'Taguig Main',
-          }),
-        });
-
-        console.log('[DEBUG] Response status:', testRes.status);
-        const testData = await testRes.json();
-        console.log('[DEBUG] Response data:', JSON.stringify(testData));
-      } catch (e) {
-        console.log('[DEBUG] Fetch error:', e.message);
-      }
 
     } catch (err) {
       console.error('analyzeSkinTone error:', err);
@@ -726,6 +669,8 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
     specialRequests: '',
     budget: '',
     branch: 'Taguig Main - Cadena de Amor',
+    designImage: null,
+    designImageUrl: '',
   });
 
   useEffect(() => {
@@ -832,6 +777,47 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   const validateEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
+  };
+
+  const handlePickDesignImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        showAlert('Permission Required', 'Permission to access your photos is required to upload a design reference.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const asset = result.assets[0];
+      const mimeType = asset.mimeType || 'image/jpeg';
+      if (!['image/jpeg', 'image/png'].includes(mimeType)) {
+        showAlert('Invalid Image', 'Please select a PNG or JPG image.');
+        return;
+      }
+      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
+        showAlert('Image Too Large', 'Please select an image smaller than 5 MB.');
+        return;
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        designImage: {
+          uri: asset.uri,
+          name: asset.fileName || asset.uri.split('/').pop() || 'design-reference.jpg',
+          type: mimeType,
+        },
+        designImageUrl: asset.uri,
+      }));
+    } catch (err) {
+      showAlert('Image Selection Failed', 'Unable to open your photo library.');
+    }
   };
 
   // Shared validation: Contact number (exact same as Rentals)
@@ -1018,6 +1004,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       specialRequests: formData.specialRequests || '',
       budget: formData.budget,
       branch: formData.branch,
+      ...(formData.designImageUrl && { designImageUrl: formData.designImageUrl }),
       ...(design3DData && { design3D: design3DData }),
     };
 
@@ -1029,6 +1016,22 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       if (!token) {
         showAlert('Session Expired', 'Please log in again.');
         return;
+      }
+
+      if (formData.designImage) {
+        const imageData = new FormData();
+        imageData.append('image', formData.designImage);
+        const uploadResponse = await fetch(`${API_URL}/custom-orders/upload-image`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: imageData,
+        });
+        const uploadBody = await uploadResponse.json().catch(() => null);
+        if (!uploadResponse.ok || !uploadBody?.url) {
+          showAlert('Upload Failed', uploadBody?.message || 'Failed to upload design reference image.');
+          return;
+        }
+        newOrder.designImageUrl = uploadBody.url;
       }
 
       const res = await mongodbService.createCustomOrder(newOrder, token);
@@ -1068,6 +1071,8 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       specialRequests: '',
       budget: '',
       branch: 'Taguig Main - Cadena de Amor',
+      designImage: null,
+      designImageUrl: '',
     });
     setDesign3DData(null);
 
@@ -1152,6 +1157,16 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   const [fittingReason, setFittingReason] = useState('');
   const [schedulingFitting, setSchedulingFitting] = useState(false);
   const [fittingError, setFittingError] = useState('');
+
+  useEffect(() => {
+    const anyActivityOpen =
+      menuVisible || showSuccessModal || showEventDatePicker ||
+      showColorDropdown || showFabricDropdown || showAIModal || cameraVisible ||
+      show3DViewer || showConsultationModal || showFittingModal ||
+      webCalendarState.active !== null;
+    setChatHidden(anyActivityOpen);
+    return () => setChatHidden(false);
+  }, [menuVisible, showSuccessModal, showEventDatePicker, showColorDropdown, showFabricDropdown, showAIModal, cameraVisible, show3DViewer, showConsultationModal, showFittingModal, webCalendarState, setChatHidden]);
 
   const handleScheduleConsultation = async () => {
     if (!consultationDate || !consultationTime) {
@@ -1766,6 +1781,25 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
                   </Text>
                 </View>
 
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Design Inspiration</Text>
+                  <TouchableOpacity style={styles.uploadBox} onPress={handlePickDesignImage} activeOpacity={0.8}>
+                    {formData.designImageUrl ? (
+                      <Image
+                        source={{ uri: formData.designImageUrl }}
+                        style={{ width: '100%', height: 160, borderRadius: 8 }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <>
+                        <Upload size={48} color="#6B5D4F" />
+                        <Text style={styles.uploadText}>Upload inspiration images</Text>
+                        <Text style={styles.uploadSubText}>PNG, JPG up to 5MB</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
                 {/* Navigation + Submit Buttons */}
                 <View style={styles.navButtonRow}>
                   <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep(2)}>
@@ -2151,7 +2185,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
 
       {/* Schedule Consultation Modal */}
       <Modal visible={showConsultationModal} transparent animationType="fade" onRequestClose={() => setShowConsultationModal(false)}>
-        <View style={styles.modalOverlay}>
+        <View style={styles.consultationModalOverlay}>
           <View style={styles.scheduleModal}>
             <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
               <Text style={styles.scheduleModalTitle}>Schedule Consultation</Text>
@@ -4456,7 +4490,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
-  modalOverlay: {
+  consultationModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',

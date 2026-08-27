@@ -20,6 +20,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Calendar, MapPin, ShoppingBag, ChevronRight, Star } from 'lucide-react-native';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { sessionService } from '../services/sessionService';
+import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 import { mongodbService } from '../services/mongodbService';
 import HamburgerMenu from '../components/HamburgerMenu';
 import Header from '../components/Header';
@@ -37,6 +38,7 @@ const branchOptions = [
 const PENDING_PAYMONGO_KEY = 'mobcaps_pending_paymongo_payment';
 
 export default function Rentals({ navigation, route, unreadCount = 0 }) {
+  const { setChatHidden } = useChatVisibility();
   // --- Rental Details Modal State ---
   const [rentalModalVisible, setRentalModalVisible] = useState(false);
   const [selectedRental, setSelectedRental] = useState(null);
@@ -134,6 +136,14 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
   const [formStep, setFormStep] = useState(1);
   const [validationErrors, setValidationErrors] = useState({});
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  useEffect(() => {
+    const anyActivityOpen =
+      rentalModalVisible || reviewModalVisible || menuVisible ||
+      showStartDatePicker || showEndDatePicker || showSuccessModal;
+    setChatHidden(anyActivityOpen);
+    return () => setChatHidden(false);
+  }, [rentalModalVisible, reviewModalVisible, menuVisible, showStartDatePicker, showEndDatePicker, showSuccessModal, setChatHidden]);
   const [alertConfig, setAlertConfig] = useState({
     visible: false,
     title: '',

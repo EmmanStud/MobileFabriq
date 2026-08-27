@@ -8,18 +8,28 @@ import {
   View,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import Svg, { Path, Ellipse } from 'react-native-svg';
 import { ArrowLeft, Camera, RefreshCw } from 'lucide-react-native';
 import { fetchAPI } from '../services/apiConfig';
 import { sessionService } from '../services/sessionService';
+import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 
 export default function MeasurementCamera({ navigation, route }) {
+  const { setChatHidden } = useChatVisibility();
   const height = route?.params?.height;
   const cameraRef = useRef(null);
+  const countdownRef = useRef(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState('front');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [message, setMessage] = useState('');
   const [invalidReason, setInvalidReason] = useState('');
+  const [countdown, setCountdown] = useState(null);
+
+  useEffect(() => {
+    setChatHidden(true);
+    return () => setChatHidden(false);
+  }, [setChatHidden]);
 
   useEffect(() => {
     if (!Number.isFinite(Number(height))) {
@@ -27,11 +37,46 @@ export default function MeasurementCamera({ navigation, route }) {
     }
   }, [height, navigation]);
 
+  useEffect(() => {
+    return () => {
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
+    };
+  }, []);
+
+  const startCountdown = () => {
+    if (isAnalyzing || countdown !== null) return;
+
+    let secondsLeft = 10;
+    setCountdown(secondsLeft);
+    countdownRef.current = setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft <= 0) {
+        clearInterval(countdownRef.current);
+        countdownRef.current = null;
+        setCountdown(null);
+        handleCapture();
+      } else {
+        setCountdown(secondsLeft);
+      }
+    }, 1000);
+  };
+
+  const cancelCountdown = () => {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+    setCountdown(null);
+  };
+
   const handleCapture = async () => {
     if (isAnalyzing || !cameraRef.current) return;
 
     setIsAnalyzing(true);
-    setMessage('Analyzing your photo...');
+    setMessage('Analyzing your photo... this can take up to 30 seconds');
     setInvalidReason('');
 
     try {
@@ -43,6 +88,7 @@ export default function MeasurementCamera({ navigation, route }) {
       const session = await sessionService.getSession();
       const response = await fetchAPI('/body-measurement/analyze', {
         method: 'POST',
+        timeout: 45000,
         headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined,
         body: JSON.stringify({
           image: photo.base64,
@@ -104,6 +150,26 @@ export default function MeasurementCamera({ navigation, route }) {
   return (
     <View style={styles.cameraScreen}>
       <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing={facing} />
+      {!isAnalyzing && (
+        <View style={styles.guideOverlay} pointerEvents="none">
+          <Svg width="220" height="480" viewBox="0 0 220 480">
+            <Ellipse cx="110" cy="45" rx="32" ry="38" stroke="rgba(255,255,255,0.55)" strokeWidth="2" strokeDasharray="6,6" fill="none" />
+            <Path
+              d="M 78 90 Q 60 130 55 180 L 45 300 L 60 460 L 90 460 L 95 320 L 110 320 L 125 320 L 130 460 L 160 460 L 175 300 L 165 180 Q 160 130 142 90 Q 110 105 78 90 Z"
+              stroke="rgba(255,255,255,0.55)"
+              strokeWidth="2"
+              strokeDasharray="6,6"
+              fill="none"
+            />
+          </Svg>
+        </View>
+      )}
+      {countdown !== null && (
+        <TouchableOpacity style={styles.countdownOverlay} onPress={cancelCountdown} activeOpacity={0.8}>
+          <Text style={styles.countdownNumber}>{countdown}</Text>
+          <Text style={styles.countdownHint}>Tap to cancel</Text>
+        </TouchableOpacity>
+      )}
       <SafeAreaView style={styles.overlay}>
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton} disabled={isAnalyzing}>
@@ -129,10 +195,10 @@ export default function MeasurementCamera({ navigation, route }) {
           {isAnalyzing ? (
             <View style={styles.loadingButton}>
               <ActivityIndicator color="#D4AF37" />
-              <Text style={styles.loadingText}>Analyzing your photo...</Text>
+              <Text style={styles.loadingText}>Analyzing your photo... this can take up to 30 seconds</Text>
             </View>
           ) : (
-            <TouchableOpacity style={styles.captureButton} onPress={handleCapture}>
+            <TouchableOpacity style={styles.captureButton} onPress={startCountdown} disabled={countdown !== null}>
               <View style={styles.captureInner}><Camera size={24} color="#000" /></View>
               <Text style={styles.captureLabel}>{invalidReason ? 'Retake Photo' : 'Capture Photo'}</Text>
             </TouchableOpacity>
@@ -145,6 +211,21 @@ export default function MeasurementCamera({ navigation, route }) {
 
 const styles = StyleSheet.create({
   cameraScreen: { flex: 1, backgroundColor: '#000' },
+  guideOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  countdownOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  countdownNumber: { color: '#D4AF37', fontSize: 96, fontWeight: '700' },
+  countdownHint: { color: '#fff', fontSize: 14, marginTop: 8 },
   overlay: { flex: 1, justifyContent: 'space-between' },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: 'rgba(0,0,0,0.42)' },
   iconButton: { width: 42, height: 42, justifyContent: 'center', alignItems: 'center' },

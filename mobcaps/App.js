@@ -21,9 +21,37 @@ import GownDesigner3D from './screens/GownDesigner3D';
 import MeasurementHeightInput from './screens/MeasurementHeightInput';
 import MeasurementCamera from './screens/MeasurementCamera';
 import MeasurementPreview from './screens/MeasurementPreview';
+import { ChatVisibilityProvider, useChatVisibility } from './contexts/ChatVisibilityContext';
  
 const Stack = createNativeStackNavigator(); 
 const POLL_INTERVAL_MS = 30000; 
+
+function FloatingChatButton({ isLoaded, chatVisible, setChatVisible }) {
+  const { chatHidden } = useChatVisibility();
+
+  if (!isLoaded || chatHidden) return null;
+
+  return (
+    <>
+      {/* Floating Chat Button */}
+      <View style={chatStyles.floatingContainer} pointerEvents="box-none">
+        <TouchableOpacity
+          style={chatStyles.floatingBtn}
+          onPress={() => setChatVisible(true)}
+          activeOpacity={0.85}
+        >
+          <MessageCircle size={28} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Chat Modal */}
+      <ChatModal
+        visible={chatVisible}
+        onClose={() => setChatVisible(false)}
+      />
+    </>
+  );
+}
  
 export default function App() { 
   const [isLoaded, setIsLoaded] = useState(false); 
@@ -120,8 +148,9 @@ export default function App() {
   const handleLogout = () => { setAuthToken(null); setUnreadCount(0); }; 
   const handleNotificationRead = () => { if (authToken) fetchUnreadCount(authToken); }; 
  
-  return ( 
-    <NavigationContainer> 
+  return (
+    <ChatVisibilityProvider>
+      <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}> 
         {!isLoaded ? ( 
           <Stack.Screen name="Splash"> 
@@ -167,28 +196,14 @@ export default function App() {
         )} 
       </Stack.Navigator> 
 
-      {isLoaded && (
-        <>
-          {/* Floating Chat Button */}
-          <View style={chatStyles.floatingContainer} pointerEvents="box-none">
-            <TouchableOpacity
-              style={chatStyles.floatingBtn}
-              onPress={() => setChatVisible(true)}
-              activeOpacity={0.85}
-            >
-              <MessageCircle size={28} color="#fff" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Chat Modal */}
-          <ChatModal
-            visible={chatVisible}
-            onClose={() => setChatVisible(false)}
-          />
-        </>
-      )}
-    </NavigationContainer> 
-  ); 
+      </NavigationContainer>
+      <FloatingChatButton
+        isLoaded={isLoaded}
+        chatVisible={chatVisible}
+        setChatVisible={setChatVisible}
+      />
+    </ChatVisibilityProvider>
+  );
 } 
 
 const chatStyles = StyleSheet.create({

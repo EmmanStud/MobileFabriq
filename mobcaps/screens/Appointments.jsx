@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 import {
   View,
   Text,
@@ -21,6 +22,7 @@ import { showAlert } from '../services/platformService';
 import { API_URL } from '../services/apiConfig';
 
 export default function Appointments({ navigation, route, unreadCount = 0 }) {
+  const { setChatHidden } = useChatVisibility();
   const [menuVisible, setMenuVisible] = useState(false);
   const [webCalendarState, setWebCalendarState] = useState({ active: null, display: null });
   const [activeTab, setActiveTab] = useState('new');
@@ -60,6 +62,14 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
 
   const [availableGowns, setAvailableGowns] = useState([]);
   const [showGownModal, setShowGownModal] = useState(false);
+
+  useEffect(() => {
+    const anyActivityOpen =
+      menuVisible || showDatePicker || showBranchModal || showTimeModal ||
+      showSuccessModal || showRescheduleModal || showCancelConfirm || showGownModal;
+    setChatHidden(anyActivityOpen);
+    return () => setChatHidden(false);
+  }, [menuVisible, showDatePicker, showBranchModal, showTimeModal, showSuccessModal, showRescheduleModal, showCancelConfirm, showGownModal, setChatHidden]);
   const [selectedGownId, setSelectedGownId] = useState('');
   const [selectedGownName, setSelectedGownName] = useState('');
 

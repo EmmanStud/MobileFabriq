@@ -26,6 +26,7 @@ import Header from '../components/Header';
 // Hooks
 import { useResendTimer } from '../hooks/useResendTimer';
 import { useNotifications } from '../hooks/useNotifications';
+import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 
 // Local Assets
 import Home1Image from '../assets/Home1Image.png'; 
@@ -181,6 +182,7 @@ const accountTermsSections = [
 ];
 
 export default function Home({ navigation, route, onLogin, onLogout, unreadCount = 0 }) {
+  const { setChatHidden } = useChatVisibility();
 
   // Carousel States
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -236,6 +238,14 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
   const [showSignupConfirmPassword, setShowSignupConfirmPassword] = useState(false);
   const [showForgotNewPassword, setShowForgotNewPassword] = useState(false);
   const [showForgotConfirmPassword, setShowForgotConfirmPassword] = useState(false);
+
+  useEffect(() => {
+    const anyActivityOpen =
+      menuVisible || authMode !== null || showForgotPasswordModal ||
+      successModal || showTermsModal;
+    setChatHidden(anyActivityOpen);
+    return () => setChatHidden(false);
+  }, [menuVisible, authMode, showForgotPasswordModal, successModal, showTermsModal, setChatHidden]);
 
   // Resend countdown timers
   const signupTimer = useResendTimer(60);
@@ -647,22 +657,19 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
       const data = await response.json();
 
       if (response.ok) {
-        setAuthMessage('EMAIL VERIFIED SUCCESSFULLY');
-        setSuccessModalMessage('Your email has been verified successfully.');
-        setSuccessModalSubtext('You can now log in with your account.');
-        setSuccessModal(true);
+        if (!data?.user || !data?.token) {
+          throw new Error('Verification succeeded but no login session was returned.');
+        }
 
-        setTimeout(() => {
-          setSuccessModal(false);
-          setSuccessModalMessage('');
-          setSuccessModalSubtext('');
-          setAuthMode('login');
-          setVerificationStep('form');
-          setPhoneVerified(false);
-          setSignupForm({ firstName: '', lastName: '', contactNumber: '', email: '', password: '', confirmPassword: '', code: '' });
-          setErrors({});
-          setAuthMessage('');
-        }, 2500);
+        await sessionService.saveSession(data.user, data.token);
+        onLogin?.(data.token);
+        setIsLoggedIn(true);
+        setAuthMode(null);
+        setVerificationStep('form');
+        setPhoneVerified(false);
+        setSignupForm({ firstName: '', lastName: '', contactNumber: '', email: '', password: '', confirmPassword: '', code: '' });
+        setErrors({});
+        setAuthMessage('');
       } else {
         setErrors({ code: data.message || 'INVALID VERIFICATION CODE. PLEASE TRY AGAIN' });
       }

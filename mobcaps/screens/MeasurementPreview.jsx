@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -11,6 +11,7 @@ import {
 import { ArrowLeft, Check } from 'lucide-react-native';
 import { fetchAPI } from '../services/apiConfig';
 import { sessionService } from '../services/sessionService';
+import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 
 const measurementFields = [
   { key: 'shoulderWidth', label: 'Shoulder Width' },
@@ -26,6 +27,7 @@ const measurementFields = [
 const validNumber = (value) => typeof value === 'number' && Number.isFinite(value);
 
 export default function MeasurementPreview({ navigation, route }) {
+  const { setChatHidden } = useChatVisibility();
   const height = Number(route?.params?.height);
   const measurements = route?.params?.measurements && typeof route.params.measurements === 'object'
     ? route.params.measurements
@@ -33,6 +35,11 @@ export default function MeasurementPreview({ navigation, route }) {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setChatHidden(true);
+    return () => setChatHidden(false);
+  }, [setChatHidden]);
 
   const visibleMeasurements = measurementFields.filter(({ key }) => validNumber(measurements[key]));
 
@@ -56,16 +63,13 @@ export default function MeasurementPreview({ navigation, route }) {
         if (validNumber(measurements[key])) numericMeasurements[key] = measurements[key];
       });
 
-      const response = await fetchAPI('/body-measurement/save', {
-        method: 'POST',
+      const response = await fetchAPI('/customers/measurements', {
+        method: 'PUT',
         headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined,
-        body: JSON.stringify({
-          customerId,
-          measurements: { height, ...numericMeasurements },
-        }),
+        body: JSON.stringify({ height, ...numericMeasurements }),
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok || data?.success !== true) {
+      if (!response.ok) {
         throw new Error('The measurements could not be saved.');
       }
 

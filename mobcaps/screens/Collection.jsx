@@ -20,8 +20,10 @@ import { mongodbService } from '../services/mongodbService';
 import { API_CONFIG } from '../services/apiConfig';
 import HamburgerMenu from '../components/HamburgerMenu';
 import Header from '../components/Header';
+import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 
 export default function Collection({ navigation, route, unreadCount = 0 }) {
+    const { setChatHidden } = useChatVisibility();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [selectedGown, setSelectedGown] = useState(null);
@@ -33,6 +35,11 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
     const [authToken, setAuthToken] = useState(null); 
     const [serverFavorites, setServerFavorites] = useState([]);
     const [show3DViewer, setShow3DViewer] = useState(false);
+
+    useEffect(() => {
+        setChatHidden(menuVisible || show3DViewer);
+        return () => setChatHidden(false);
+    }, [menuVisible, show3DViewer, setChatHidden]);
 
     const VIEWER_BASE_URL = 'https://fabriq-3d-server-production.up.railway.app';
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -11,10 +11,17 @@ import {
   View,
 } from 'react-native';
 import { Ruler } from 'lucide-react-native';
+import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 
 export default function MeasurementHeightInput({ navigation }) {
+  const { setChatHidden } = useChatVisibility();
   const [height, setHeight] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setChatHidden(true);
+    return () => setChatHidden(false);
+  }, [setChatHidden]);
 
   const handleContinue = () => {
     const trimmedHeight = height.trim();
