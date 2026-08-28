@@ -195,6 +195,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
   const [authMode, setAuthMode] = useState(null); // 'login', 'signup', or null
   const [verificationStep, setVerificationStep] = useState('form'); // 'form' | 'mobile' | 'email'
   const [phoneVerified, setPhoneVerified] = useState(false);
+  const [signupToken, setSignupToken] = useState('');
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   
   // Form State
@@ -487,6 +488,8 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         return;
       }
 
+      setSignupToken(data.signupToken || '');
+
       // SMS sent — show phone OTP panel
       setVerificationStep('mobile');
       setAuthMessage('SMS CODE SENT TO ' + signupForm.contactNumber);
@@ -514,6 +517,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         body: JSON.stringify({
           email: signupForm.email.trim().toLowerCase(),
           code: phoneOtpCode.trim(),
+          signupToken,
         }),
       });
 
@@ -602,6 +606,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         email: email,
         password: signupForm.password,
         phoneNumber: formatPhilippinesPhone(signupForm.contactNumber),
+        signupToken,
       };
 
       console.log('📤 Sending signup request:', requestBody);
@@ -621,6 +626,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         throw new Error(responseData.message || "Sign up failed");
       }
 
+      setSignupToken(responseData.signupToken || signupToken);
       setVerificationStep('email');
       signupTimer.startTimer();
       setAuthMessage(responseData.message || 'VERIFICATION CODE SENT TO YOUR EMAIL');
@@ -652,6 +658,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         body: JSON.stringify({
           email: signupForm.email.trim().toLowerCase(),
           code: signupForm.code.trim(),
+          signupToken,
         }),
       });
       const data = await response.json();
@@ -668,6 +675,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         setVerificationStep('form');
         setPhoneVerified(false);
         setSignupForm({ firstName: '', lastName: '', contactNumber: '', email: '', password: '', confirmPassword: '', code: '' });
+        setSignupToken('');
         setErrors({});
         setAuthMessage('');
       } else {
@@ -688,6 +696,36 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
     } else if (authMode === 'signup') {
       if (verificationStep === 'form') {
         if (!phoneVerified) {
+          const firstNameError = validators.firstName(signupForm.firstName);
+          const lastNameError = validators.lastName(signupForm.lastName);
+          const contactNumberError = validators.phoneNumber(signupForm.contactNumber);
+          const emailError = validators.email(signupForm.email);
+          const passwordError = validators.password(signupForm.password, true);
+          const confirmPasswordError = validators.confirmPassword(
+            signupForm.confirmPassword,
+            signupForm.password
+          );
+
+          const formErrors = {
+            firstName: firstNameError,
+            lastName: lastNameError,
+            contactNumber: contactNumberError,
+            email: emailError,
+            password: passwordError,
+            confirmPassword: confirmPasswordError,
+          };
+
+          const hasValidationError = Object.values(formErrors).some(Boolean);
+
+          if (hasValidationError) {
+            const filteredErrors = Object.fromEntries(
+              Object.entries(formErrors).filter(([, value]) => value)
+            );
+            setErrors(filteredErrors);
+            return;
+          }
+
+          setErrors({});
           await handleSendPhoneOtp();
         } else if (!hasAcceptedTerms) {
           setHasScrolledTermsToBottom(false);
@@ -835,6 +873,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         email: signupForm.email.trim().toLowerCase(),
         password: signupForm.password,
         phoneNumber: formatPhilippinesPhone(signupForm.contactNumber),
+        signupToken,
       };
 
       const response = await fetch(`${API_URL}/auth/signup`, {
@@ -1147,6 +1186,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         setErrors({});
         setLoginForm({ email: '', password: '' });
         setSignupForm({ firstName: '', lastName: '', contactNumber: '', email: '', password: '', confirmPassword: '', code: '' });
+        setSignupToken('');
         setAuthMessage('');
         setForgotPasswordForm({ email: '', code: '', newPassword: '', confirmPassword: '', step: 'email' });
         setPhoneOtpCode('');
@@ -1611,7 +1651,10 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         {authMode === 'signup' && (
           <TouchableOpacity
             style={styles.toggleAuth}
-            onPress={() => setAuthMode('login')}
+            onPress={() => {
+              setSignupToken('');
+              setAuthMode('login');
+            }}
           >
             <Text style={styles.toggleText}>Already have an account? Sign In</Text>
           </TouchableOpacity>
@@ -1897,8 +1940,8 @@ const styles = StyleSheet.create({
   textLinkBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 30 },
   textLink: { fontSize: 12, fontWeight: 'bold', borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
   imageWrapper: { marginTop: 40, position: 'relative' },
-  heroImage: { width: '100%', height: 450 },
-  collectionImage: { width: '100%', height: 350, marginTop: 20 },
+  heroImage: { width: '100%', aspectRatio: 0.72 },
+  collectionImage: { width: '100%', aspectRatio: 0.9, marginTop: 20 },
   clientBadge: { position: 'absolute', bottom: -10, left: -10, backgroundColor: '#FFF', padding: 20, elevation: 5 },
   badgeSub: { fontSize: 10, color: '#6B5D4F' },
   badgeMain: { fontSize: 18, fontFamily: 'serif', marginTop: 5 },
