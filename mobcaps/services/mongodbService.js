@@ -826,7 +826,7 @@ export const mongodbService = {
       });
       let body = null;
       try { body = await response.json(); } catch { body = null; }
-      if (response.ok) return { success: true };
+      if (response.ok) return { success: true, review: body?.review || null };
       if (response.status === 409) return { success: false, alreadyReviewed: true, error: body?.message || 'Already reviewed.' };
       return { success: false, error: body?.message || 'Failed to submit review.' };
     } catch (err) {

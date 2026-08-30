@@ -90,13 +90,20 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
           authToken 
         ); 
         if (result.success) { 
+          const updatedFields = {
+            hasReview: true,
+            reviewScore: result.review?.score ?? reviewScore,
+            reviewComment: result.review?.comment ?? reviewComment.trim(),
+            reviewSubmittedAt: result.review?.updatedAt || result.review?.createdAt || new Date().toISOString(),
+          };
           setUserRentals(prev => 
             prev.map(r => 
               r.id === selectedReviewRental.id 
-                ? { ...r, hasReview: true } 
+                ? { ...r, ...updatedFields } 
                 : r 
             ) 
           ); 
+          setSelectedReviewRental(prev => (prev ? { ...prev, ...updatedFields } : prev));
           setReviewSuccess(true); 
         } else if (result.alreadyReviewed) { 
           setReviewError('You have already submitted a review for this rental.'); 
@@ -1214,7 +1221,9 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
                     <View style={[styles.successModalContent, { alignItems: 'flex-start' }]}> 
                       {reviewSuccess ? ( 
                         <> 
-                          <Text style={[styles.successTitle, { fontSize: 20 }]}>Review Submitted!</Text> 
+                          <Text style={[styles.successTitle, { fontSize: 20 }]}> 
+                            {selectedReviewRental?.hasReview ? 'Review Updated!' : 'Review Submitted!'} 
+                          </Text> 
                           <Text style={styles.successSubMessage}> 
                             Thank you for your feedback on {selectedReviewRental?.gownName}. 
                           </Text> 
@@ -1234,12 +1243,14 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
                       ) : ( 
                         <> 
                           <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#1a1a1a', marginBottom: 4 }}> 
-                            Leave a Review 
+                            {selectedReviewRental?.hasReview ? 'Edit Review' : 'Leave a Review'} 
                           </Text> 
                           <Text style={{ fontSize: 13, color: '#6B5D4F', marginBottom: 16 }}> 
-                            {selectedReviewRental?.gownName} 
-                          </Text> 
-          
+                            {selectedReviewRental?.hasReview 
+                              ? `Update your review for ${selectedReviewRental?.gownName}.` 
+                              : selectedReviewRental?.gownName} 
+                          </Text>
+
                           {/* Star Rating */} 
                           <Text style={{ fontSize: 13, color: '#6B5D4F', marginBottom: 8 }}>Your Rating *</Text> 
                           <View style={{ flexDirection: 'row', marginBottom: 16, gap: 8 }}> 
@@ -1305,7 +1316,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
                             </TouchableOpacity> 
                           </View> 
                         </> 
-                      )} 
+                      )}
                     </View> 
                   </View> 
                 </Modal> 
@@ -1347,13 +1358,11 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
                               paddingHorizontal: 16, 
                               alignSelf: 'flex-end', 
                               backgroundColor: '#FAF7F0', 
-                              opacity: rental.hasReview ? 0.5 : 1, 
                             }} 
-                            disabled={Boolean(rental.hasReview)} 
                             onPress={() => { 
                               setSelectedReviewRental(rental); 
-                              setReviewScore(0); 
-                              setReviewComment(''); 
+                              setReviewScore(rental.hasReview ? Number(rental.reviewScore || 0) : 0); 
+                              setReviewComment(rental.hasReview ? String(rental.reviewComment || '') : ''); 
                               setReviewError(''); 
                               setReviewSuccess(false); 
                               setReviewModalVisible(true); 
@@ -1361,7 +1370,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
                           > 
                             <Star size={16} color="#D4AF37" fill="#D4AF37" /> 
                             <Text style={{ fontSize: 13, color: '#6B5D4F', fontWeight: '500' }}> 
-                              {rental.hasReview ? 'Reviewed' : 'Leave a Review'} 
+                              {rental.hasReview ? 'Edit Review' : 'Leave a Review'} 
                             </Text> 
                           </TouchableOpacity> 
                         </View> 

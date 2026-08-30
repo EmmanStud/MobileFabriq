@@ -28,6 +28,7 @@ import { mongodbService } from '../services/mongodbService';
 import { API_URL, API_CONFIG, fetchAPI } from '../services/apiConfig';
 import HamburgerMenu from '../components/HamburgerMenu';
 import Header from '../components/Header';
+import CustomAlertModal from '../components/CustomAlertModal';
 import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 import { showAlert } from '../services/platformService';
 
@@ -184,6 +185,54 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   const [capturedImage, setCapturedImage] = useState(null);
   const [skinAnalysis, setSkinAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    mode: 'alert',
+    onConfirm: null,
+    onCancel: null,
+  });
+
+  const closeAlert = () => {
+    setAlertConfig((prev) => ({
+      ...prev,
+      visible: false,
+      onConfirm: null,
+      onCancel: null,
+    }));
+  };
+
+  const openAlert = ({ title, message, mode = 'alert', onConfirm, onCancel }) => {
+    setAlertConfig({
+      visible: true,
+      title,
+      message,
+      mode,
+      onConfirm: mode === 'confirm'
+        ? () => {
+            if (typeof onConfirm === 'function') {
+              onConfirm();
+            }
+            closeAlert();
+          }
+        : () => {
+            if (typeof onConfirm === 'function') {
+              onConfirm();
+            }
+            closeAlert();
+          },
+      onCancel: mode === 'confirm'
+        ? () => {
+            if (typeof onCancel === 'function') {
+              onCancel();
+            }
+            closeAlert();
+          }
+        : null,
+    });
+  };
+
   const [allGowns, setAllGowns] = useState([]);
   const [recommendedGowns, setRecommendedGowns] = useState([]);
   const cameraRef = React.useRef(null);
@@ -429,10 +478,10 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       const analysis = responseData?.analysis;
 
       if (!analysis?.imageSuitable) {
-        Alert.alert(
-          'Analysis Failed',
-          analysis?.reason || 'Could not analyze skin tone. Please try again with better lighting.'
-        );
+        openAlert({
+          title: 'Analysis Failed',
+          message: analysis?.reason || 'Could not analyze skin tone. Please try again with better lighting.',
+        });
         return;
       }
 
@@ -459,7 +508,10 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
 
     } catch (err) {
       console.error('analyzeSkinTone error:', err);
-      Alert.alert('Analysis Failed', 'Could not analyze skin tone. Please try again with better lighting.');
+      openAlert({
+        title: 'Analysis Failed',
+        message: 'Could not analyze skin tone. Please try again with better lighting.',
+      });
     } finally {
       setIsAnalyzing(false);
     }
@@ -519,7 +571,10 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
     if (!permission.granted) {
       const result = await requestPermission();
       if (!result.granted) {
-        showAlert('Permission Denied', 'Camera access is required to use this feature.');
+        openAlert({
+          title: 'Permission Denied',
+          message: 'Camera access is required to use this feature.',
+        });
         return;
       }
     }
@@ -538,11 +593,10 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       const faceDetected = await validateFacePresence(photo.uri);
 
       if (!faceDetected) {
-        Alert.alert(
-          '⚠️ No Face Detected',
-          'We could not detect a face in the photo. Please:\n\n• Center your face in the oval\n• Ensure good lighting\n• Remove sunglasses or mask\n• Move closer to the camera',
-          [{ text: 'Try Again', style: 'default' }]
-        );
+        openAlert({
+          title: '⚠️ No Face Detected',
+          message: 'We could not detect a face in the photo. Please:\n\n• Center your face in the oval\n• Ensure good lighting\n• Remove sunglasses or mask\n• Move closer to the camera',
+        });
         return; // Stay on camera — don't close
       }
 
@@ -553,7 +607,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
 
     } catch (err) {
       console.error('takePicture error:', err);
-      Alert.alert('Error', 'Could not take photo. Please try again.');
+      openAlert({ title: 'Error', message: 'Could not take photo. Please try again.' });
     }
   };
 
@@ -2857,6 +2911,17 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* Custom Alert Modal - Rendered LAST to ensure it appears on top */}
+      <CustomAlertModal
+        visible={alertConfig.visible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        mode={alertConfig.mode}
+        onConfirm={alertConfig.onConfirm}
+        onCancel={alertConfig.onCancel}
+        onClose={closeAlert}
+      />
 
     </SafeAreaView>
   );

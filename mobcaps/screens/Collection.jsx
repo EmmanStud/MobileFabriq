@@ -481,29 +481,42 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
 
                             <ScrollView contentContainerStyle={styles.modalContent}>
                                 {/* Image Section */}
-                                {selectedGown.hasImage ? (
-                                    <View style={{ width: '100%', height: 400 }}>
-                                        <View style={[StyleSheet.absoluteFill, { backgroundColor: selectedGown.placeholderColor, justifyContent: 'center', alignItems: 'center' }]}>
-                                            <ActivityIndicator size="large" color="rgba(255,255,255,0.6)" />
+                                <View style={styles.modalImageWrapper}>
+                                    {selectedGown.hasImage ? (
+                                        <View style={{ width: '100%', height: 400 }}>
+                                            <View style={[StyleSheet.absoluteFill, { backgroundColor: selectedGown.placeholderColor, justifyContent: 'center', alignItems: 'center' }]}>
+                                                <ActivityIndicator size="large" color="rgba(255,255,255,0.6)" />
+                                            </View>
+                                            <Image 
+                                                source={selectedGown.image} 
+                                                style={styles.modalImageFull} 
+                                                resizeMode="cover"
+                                                onError={() => {
+                                                    handleImageError(selectedGown.id, selectedGown.image?.uri);
+                                                    setSelectedGown(prev => prev ? { ...prev, hasImage: false, image: null } : null);
+                                                }}
+                                            />
                                         </View>
-                                        <Image 
-                                            source={selectedGown.image} 
-                                            style={styles.modalImageFull} 
-                                            resizeMode="cover"
-                                            onError={() => {
-                                                handleImageError(selectedGown.id, selectedGown.image?.uri);
-                                                setSelectedGown(prev => prev ? { ...prev, hasImage: false, image: null } : null);
-                                            }}
+                                    ) : (
+                                        <View style={[styles.modalImageFull, { backgroundColor: selectedGown.placeholderColor, justifyContent: 'center', alignItems: 'center' }]}>
+                                            <ShoppingBag size={40} color="rgba(255,255,255,0.5)" />
+                                            <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginTop: 8 }}>
+                                                {selectedGown.name}
+                                            </Text>
+                                        </View>
+                                    )}
+
+                                    <TouchableOpacity
+                                        style={styles.modalFavBtn}
+                                        onPress={() => toggleFavorite(selectedGown.id)}
+                                    >
+                                        <Heart
+                                            size={20}
+                                            color={favorites.includes(selectedGown.id) ? '#e11d48' : '#6B5D4F'}
+                                            fill={favorites.includes(selectedGown.id) ? '#e11d48' : 'none'}
                                         />
-                                    </View>
-                                ) : (
-                                    <View style={[styles.modalImageFull, { backgroundColor: selectedGown.placeholderColor, justifyContent: 'center', alignItems: 'center' }]}>
-                                        <ShoppingBag size={40} color="rgba(255,255,255,0.5)" />
-                                        <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginTop: 8 }}>
-                                            {selectedGown.name}
-                                        </Text>
-                                    </View>
-                                )}
+                                    </TouchableOpacity>
+                                </View>
 
                                 {/* Details Section */}
                                 <View style={styles.detailsSection}>
@@ -745,6 +758,15 @@ const styles = StyleSheet.create({
     badge: { position: 'absolute', top: 8, left: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
     badgeText: { color: '#fff', fontSize: 11, textTransform: 'uppercase' },
     favBtn: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(255,255,255,0.9)', padding: 6, borderRadius: 20 },
+    modalFavBtn: {
+        position: 'absolute',
+        top: 12,
+        left: 12,
+        zIndex: 10,
+        backgroundColor: 'rgba(255,255,255,0.9)',
+        padding: 8,
+        borderRadius: 20,
+    },
     cardContent: { padding: 10 },
     metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
     ratingRow: { flexDirection: 'row', alignItems: 'center' },
@@ -771,6 +793,7 @@ const styles = StyleSheet.create({
     viewerWebView: { flex: 1, backgroundColor: '#111' },
     viewerLoader: { flex: 1, backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' },
     modalContent: { paddingBottom: 40 },
+    modalImageWrapper: { position: 'relative' },
     modalImageFull: { width: '100%', height: 350, backgroundColor: '#F5F1E8' },
     detailsSection: { padding: Platform.OS === 'web' ? 32 : 20, paddingTop: Platform.OS === 'web' ? 24 : 20 },
     ratingSection: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 },

@@ -195,6 +195,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
   const [authMode, setAuthMode] = useState(null); // 'login', 'signup', or null
   const [verificationStep, setVerificationStep] = useState('form'); // 'form' | 'mobile' | 'email'
   const [phoneVerified, setPhoneVerified] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
   const [signupToken, setSignupToken] = useState('');
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   
@@ -224,6 +225,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
   const [successModal, setSuccessModal] = useState(false);
   const [successModalMessage, setSuccessModalMessage] = useState('');
   const [successModalSubtext, setSuccessModalSubtext] = useState('');
+  const [isSignupSuccess, setIsSignupSuccess] = useState(false);
   
   // Phone Verification State
   const [phoneOtpCode, setPhoneOtpCode] = useState('');
@@ -528,10 +530,10 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         return;
       }
 
-      // Phone verified ✅ — return to signup form and prompt for email verification
+      // Phone verified ✅ — continue directly to email verification
       setPhoneOtpCode('');
       setPhoneVerified(true);
-      setVerificationStep('form');
+      setVerificationStep('email');
       setAuthMessage('PHONE VERIFIED. PLEASE VERIFY YOUR EMAIL.');
       setErrors({});
 
@@ -552,12 +554,36 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
 
   const handleRefuseTerms = () => {
     setShowTermsModal(false);
+    setHasAcceptedTerms(false);
   };
 
-  const handleContinueTerms = async () => {
+  const handleContinueTerms = () => {
     setHasAcceptedTerms(true);
     setShowTermsModal(false);
-    await handleSignup();
+    setSuccessModalMessage('Your account has been successfully created.');
+    setSuccessModalSubtext('You can now log in using your email and password.');
+    setSuccessModal(true);
+    setIsSignupSuccess(true);
+  };
+
+  const handleContinueSignupSuccess = () => {
+    setSuccessModal(false);
+    setSuccessModalMessage('');
+    setSuccessModalSubtext('');
+    setIsSignupSuccess(false);
+    setVerificationStep('form');
+    setPhoneVerified(false);
+    setEmailVerified(false);
+    setSignupForm({ firstName: '', lastName: '', contactNumber: '', email: '', password: '', confirmPassword: '', code: '' });
+    setPhoneOtpCode('');
+    setSignupToken('');
+    setHasAcceptedTerms(false);
+    setHasScrolledTermsToBottom(false);
+    setShowTermsModal(false);
+    setAuthMessage('');
+    setErrors({});
+    setLoginForm({ email: '', password: '' });
+    setAuthMode('login');
   };
 
   // Handle signup
@@ -664,20 +690,11 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
       const data = await response.json();
 
       if (response.ok) {
-        if (!data?.user || !data?.token) {
-          throw new Error('Verification succeeded but no login session was returned.');
-        }
-
-        await sessionService.saveSession(data.user, data.token);
-        onLogin?.(data.token);
-        setIsLoggedIn(true);
-        setAuthMode(null);
-        setVerificationStep('form');
-        setPhoneVerified(false);
-        setSignupForm({ firstName: '', lastName: '', contactNumber: '', email: '', password: '', confirmPassword: '', code: '' });
-        setSignupToken('');
+        setEmailVerified(true);
+        setHasScrolledTermsToBottom(false);
+        setShowTermsModal(true);
         setErrors({});
-        setAuthMessage('');
+        setAuthMessage('EMAIL VERIFIED. PLEASE REVIEW THE TERMS & CONDITIONS.');
       } else {
         setErrors({ code: data.message || 'INVALID VERIFICATION CODE. PLEASE TRY AGAIN' });
       }
@@ -727,16 +744,16 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
 
           setErrors({});
           await handleSendPhoneOtp();
-        } else if (!hasAcceptedTerms) {
-          setHasScrolledTermsToBottom(false);
-          setShowTermsModal(true);
-        } else {
-          await handleSignup();
         }
       } else if (verificationStep === 'mobile') {
         await handleVerifyPhone();
       } else if (verificationStep === 'email') {
-        await handleVerification();
+        if (emailVerified) {
+          setHasScrolledTermsToBottom(false);
+          setShowTermsModal(true);
+        } else {
+          await handleVerification();
+        }
       }
     } else if (authMode === 'forgotPassword') {
       await handleForgotPasswordAction();
@@ -837,6 +854,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
       );
       
       if (result.success) {
+        setIsSignupSuccess(false);
         setSuccessModalMessage('Your password has been reset successfully.');
         setSuccessModalSubtext('You can now log in with your new password.');
         setSuccessModal(true);
@@ -1180,6 +1198,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         setAuthMode(null); 
         setVerificationStep('form');
         setPhoneVerified(false);
+        setEmailVerified(false);
         setHasAcceptedTerms(false);
         setHasScrolledTermsToBottom(false);
         setShowTermsModal(false);
@@ -1490,118 +1509,6 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
           </View>
         )}
 
-        {/* FORGOT PASSWORD FIELDS */}
-        {authMode === 'forgotPassword' && forgotPasswordForm.step === 'email' && (
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>EMAIL ADDRESS</Text>
-            <TextInput
-              style={[styles.authInput, errors.email && styles.inputErrorBorder]}
-              onChangeText={(val) => {
-                setForgotPasswordForm({ ...forgotPasswordForm, email: val });
-              }}
-              value={forgotPasswordForm.email}
-              placeholder="example@gmail.com"
-              placeholderTextColor="#888888"
-              autoCapitalize="none"
-            />
-            {errors.email && <Text style={styles.warningText}>{errors.email}</Text>}
-          </View>
-        )}
-
-        {authMode === 'forgotPassword' && forgotPasswordForm.step === 'code' && (
-          <View style={styles.inputGroup}>
-            <Text style={styles.verifySub}>We sent a code to {forgotPasswordForm.email}</Text>
-            <TextInput
-              style={[styles.authInput, errors.code && styles.inputErrorBorder]}
-              placeholder="000000"
-              placeholderTextColor="#888888"
-              keyboardType="number-pad"
-              maxLength={6}
-              onChangeText={(val) => { 
-                setForgotPasswordForm({ ...forgotPasswordForm, code: val }); 
-                if (val) {
-                  setErrors(prev => ({ ...prev, code: '' }));
-                }
-              }}
-              value={forgotPasswordForm.code}
-            />
-            {errors.code && <Text style={styles.warningText}>{errors.code}</Text>}
-            {authMessage && <Text style={[styles.warningText, { color: '#28a745' }]}>{authMessage}</Text>}
-          </View>
-        )}
-
-        {authMode === 'forgotPassword' && forgotPasswordForm.step === 'reset' && (
-          <>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>NEW PASSWORD</Text>
-              <View style={styles.passwordInputWrapper}>
-                <TextInput
-                  style={[styles.authInput, errors.newPassword && styles.inputErrorBorder, { flex: 1, color: '#1a1a1a' }]}
-                  onChangeText={(val) => {
-                    setForgotPasswordForm({ ...forgotPasswordForm, newPassword: val });
-                  }}
-                  value={forgotPasswordForm.newPassword}
-                  placeholder="••••••••"
-                  placeholderTextColor="#888888"
-                  secureTextEntry={!showForgotNewPassword}
-                />
-                <TouchableOpacity 
-                  onPress={() => setShowForgotNewPassword(!showForgotNewPassword)}
-                  style={styles.eyeIcon}
-                >
-                  {showForgotNewPassword ? <Eye size={20} color="#999" /> : <EyeOff size={20} color="#999" />}
-                </TouchableOpacity>
-              </View>
-              {/* Password checklist for forgot password */}
-              <View style={styles.passwordChecklistContainer}>
-                <View style={styles.checklistItem}>
-                  <Text style={forgotPasswordChecklist.length ? styles.checkPassed : styles.checkFailed}>{forgotPasswordChecklist.length ? '✓' : '✗'}</Text>
-                  <Text style={styles.checklistText}>Minimum 8 characters</Text>
-                </View>
-                <View style={styles.checklistItem}>
-                  <Text style={forgotPasswordChecklist.uppercase ? styles.checkPassed : styles.checkFailed}>{forgotPasswordChecklist.uppercase ? '✓' : '✗'}</Text>
-                  <Text style={styles.checklistText}>At least one uppercase letter</Text>
-                </View>
-                <View style={styles.checklistItem}>
-                  <Text style={forgotPasswordChecklist.lowercase ? styles.checkPassed : styles.checkFailed}>{forgotPasswordChecklist.lowercase ? '✓' : '✗'}</Text>
-                  <Text style={styles.checklistText}>At least one lowercase letter</Text>
-                </View>
-                <View style={styles.checklistItem}>
-                  <Text style={forgotPasswordChecklist.number ? styles.checkPassed : styles.checkFailed}>{forgotPasswordChecklist.number ? '✓' : '✗'}</Text>
-                  <Text style={styles.checklistText}>At least one number</Text>
-                </View>
-                <View style={styles.checklistItem}>
-                  <Text style={forgotPasswordChecklist.special ? styles.checkPassed : styles.checkFailed}>{forgotPasswordChecklist.special ? '✓' : '✗'}</Text>
-                  <Text style={styles.checklistText}>At least one special character</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>CONFIRM PASSWORD</Text>
-              <View style={styles.passwordInputWrapper}>
-                <TextInput
-                  style={[styles.authInput, errors.confirmPassword && styles.inputErrorBorder, { flex: 1, color: '#1a1a1a' }]}
-                  onChangeText={(val) => {
-                    setForgotPasswordForm({ ...forgotPasswordForm, confirmPassword: val });
-                  }}
-                  value={forgotPasswordForm.confirmPassword}
-                  placeholder="••••••••"
-                  placeholderTextColor="#888888"
-                  secureTextEntry={!showForgotConfirmPassword}
-                />
-                <TouchableOpacity 
-                  onPress={() => setShowForgotConfirmPassword(!showForgotConfirmPassword)}
-                  style={styles.eyeIcon}
-                >
-                  {showForgotConfirmPassword ? <Eye size={20} color="#999" /> : <EyeOff size={20} color="#999" />}
-                </TouchableOpacity>
-              </View>
-              {errors.confirmPassword && <Text style={styles.warningText}>{errors.confirmPassword}</Text>}
-            </View>
-          </>
-        )}
-
         {errors.general && <Text style={styles.warningText}>{errors.general}</Text>}
         
         <TouchableOpacity
@@ -1652,6 +1559,13 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
           <TouchableOpacity
             style={styles.toggleAuth}
             onPress={() => {
+              setVerificationStep('form');
+              setPhoneVerified(false);
+              setEmailVerified(false);
+              setHasAcceptedTerms(false);
+              setHasScrolledTermsToBottom(false);
+              setShowTermsModal(false);
+              setPhoneOtpCode('');
               setSignupToken('');
               setAuthMode('login');
             }}
@@ -1836,37 +1750,76 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
           <>
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>NEW PASSWORD</Text>
-              <TextInput
-                style={[styles.authInput, errors.newPassword && styles.inputErrorBorder]}
-                onChangeText={(val) => {
-                  setForgotPasswordForm({ ...forgotPasswordForm, newPassword: val });
-                  // Real-time validation (no visual checklist)
-                  const error = resetValidators.newPassword(val);
-                  setErrors(prev => ({ ...prev, newPassword: error }));
-                }}
-                value={forgotPasswordForm.newPassword}
-                placeholder="••••••••"
-                placeholderTextColor="#888888"
-                secureTextEntry
-              />
-              {errors.newPassword && <Text style={styles.warningText}>{errors.newPassword}</Text>}
+              <View style={styles.passwordInputWrapper}>
+                <TextInput
+                  style={[styles.authInput, errors.newPassword && styles.inputErrorBorder, { flex: 1 }]}
+                  onChangeText={(val) => {
+                    const updatedForm = { ...forgotPasswordForm, newPassword: val };
+                    setForgotPasswordForm(updatedForm);
+                    setErrors(prev => ({ ...prev, newPassword: '' }));
+                    if (updatedForm.confirmPassword) {
+                      const confirmError = resetValidators.confirmPassword(updatedForm.confirmPassword, val);
+                      setErrors(prev => ({ ...prev, confirmPassword: confirmError }));
+                    }
+                  }}
+                  value={forgotPasswordForm.newPassword}
+                  placeholder="••••••••"
+                  placeholderTextColor="#888888"
+                  secureTextEntry={!showForgotNewPassword}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowForgotNewPassword(!showForgotNewPassword)}
+                  style={styles.eyeIcon}
+                >
+                  {showForgotNewPassword ? <Eye size={20} color="#999" /> : <EyeOff size={20} color="#999" />}
+                </TouchableOpacity>
+              </View>
+              <View style={styles.passwordChecklistContainer}>
+                <View style={styles.checklistItem}>
+                  <Text style={forgotPasswordChecklist.length ? styles.checkPassed : styles.checkFailed}>{forgotPasswordChecklist.length ? '✓' : '✗'}</Text>
+                  <Text style={styles.checklistText}>Minimum 8 characters</Text>
+                </View>
+                <View style={styles.checklistItem}>
+                  <Text style={forgotPasswordChecklist.uppercase ? styles.checkPassed : styles.checkFailed}>{forgotPasswordChecklist.uppercase ? '✓' : '✗'}</Text>
+                  <Text style={styles.checklistText}>At least one uppercase letter</Text>
+                </View>
+                <View style={styles.checklistItem}>
+                  <Text style={forgotPasswordChecklist.lowercase ? styles.checkPassed : styles.checkFailed}>{forgotPasswordChecklist.lowercase ? '✓' : '✗'}</Text>
+                  <Text style={styles.checklistText}>At least one lowercase letter</Text>
+                </View>
+                <View style={styles.checklistItem}>
+                  <Text style={forgotPasswordChecklist.number ? styles.checkPassed : styles.checkFailed}>{forgotPasswordChecklist.number ? '✓' : '✗'}</Text>
+                  <Text style={styles.checklistText}>At least one number</Text>
+                </View>
+                <View style={styles.checklistItem}>
+                  <Text style={forgotPasswordChecklist.special ? styles.checkPassed : styles.checkFailed}>{forgotPasswordChecklist.special ? '✓' : '✗'}</Text>
+                  <Text style={styles.checklistText}>At least one special character</Text>
+                </View>
+              </View>
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>CONFIRM PASSWORD</Text>
-              <TextInput
-                style={[styles.authInput, errors.confirmPassword && styles.inputErrorBorder]}
-                onChangeText={(val) => {
-                  setForgotPasswordForm({ ...forgotPasswordForm, confirmPassword: val });
-                  // Real-time validation - check if matches new password
-                  const error = resetValidators.confirmPassword(val, forgotPasswordForm.newPassword);
-                  setErrors(prev => ({ ...prev, confirmPassword: error }));
-                }}
-                value={forgotPasswordForm.confirmPassword}
-                placeholder="••••••••"
-                placeholderTextColor="#888888"
-                secureTextEntry
-              />
+              <View style={styles.passwordInputWrapper}>
+                <TextInput
+                  style={[styles.authInput, errors.confirmPassword && styles.inputErrorBorder, { flex: 1 }]}
+                  onChangeText={(val) => {
+                    setForgotPasswordForm({ ...forgotPasswordForm, confirmPassword: val });
+                    const error = resetValidators.confirmPassword(val, forgotPasswordForm.newPassword);
+                    setErrors(prev => ({ ...prev, confirmPassword: error }));
+                  }}
+                  value={forgotPasswordForm.confirmPassword}
+                  placeholder="••••••••"
+                  placeholderTextColor="#888888"
+                  secureTextEntry={!showForgotConfirmPassword}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowForgotConfirmPassword(!showForgotConfirmPassword)}
+                  style={styles.eyeIcon}
+                >
+                  {showForgotConfirmPassword ? <Eye size={20} color="#999" /> : <EyeOff size={20} color="#999" />}
+                </TouchableOpacity>
+              </View>
               {errors.confirmPassword && <Text style={styles.warningText}>{errors.confirmPassword}</Text>}
             </View>
           </>
@@ -1912,9 +1865,14 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
 <Modal visible={successModal} transparent animationType="fade">
   <View style={styles.successOverlay}>
     <View style={styles.successModalBox}>
-      <Text style={styles.successTitle}>✓ Success!</Text>
+      <Text style={styles.successTitle}>{isSignupSuccess ? 'CONGRATULATIONS!' : '✓ Success!'}</Text>
       <Text style={styles.successMessage}>{successModalMessage || 'Operation completed successfully.'}</Text>
       <Text style={styles.successSubtext}>{successModalSubtext || 'You can now continue by signing in.'}</Text>
+      {isSignupSuccess && (
+        <TouchableOpacity style={styles.authSubmitBtn} onPress={handleContinueSignupSuccess}>
+          <Text style={styles.authSubmitText}>CONTINUE TO LOGIN</Text>
+        </TouchableOpacity>
+      )}
     </View>
   </View>
 </Modal>

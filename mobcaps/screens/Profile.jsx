@@ -587,11 +587,11 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
           throw new Error(passwordResult.message || 'Failed to change password');
         }
 
-        await sessionService.clearSession();
-        setIsLoggedIn(false);
-        setCurrentUser(null);
         setIsEditModalOpen(false);
-        showCustomAlert('Password Changed', 'Your password was updated. Please sign in again.', () => {
+        showCustomAlert('Password Changed', 'Your password was updated. Please sign in again.', async () => {
+          await sessionService.clearSession();
+          setIsLoggedIn(false);
+          setCurrentUser(null);
           navigation.navigate('Home');
         });
         return;
