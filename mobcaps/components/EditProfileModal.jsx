@@ -39,6 +39,9 @@ export default function EditProfileModal({
   const [email, setEmail] = useState(customerData?.email || '');
   const [phone, setPhone] = useState(customerData?.phone || '');
   const [address, setAddress] = useState(customerData?.address || '');
+  const [preferredBranch, setPreferredBranch] = useState(
+    customerData?.preferredBranch || 'Taguig Main - Cadena de Amor'
+  );
 
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
@@ -69,6 +72,7 @@ export default function EditProfileModal({
       setEmail(customerData.email || '');
       setPhone(customerData.phone || '');
       setAddress(customerData.address || '');
+      setPreferredBranch(customerData.preferredBranch || 'Taguig Main - Cadena de Amor');
       setPhoneFieldTouched(false); // Reset phone touched state when modal opens
     }
   }, [visible, customerData]);
@@ -264,6 +268,7 @@ export default function EditProfileModal({
       email,
       phone,
       address,
+      preferredBranch,
     };
 
     // Add password if user is changing it - send plain passwords for bcrypt verification
@@ -301,6 +306,7 @@ export default function EditProfileModal({
     setEmail(customerData?.email || '');
     setPhone(customerData?.phone || '');
     setAddress(customerData?.address || '');
+    setPreferredBranch(customerData?.preferredBranch || 'Taguig Main - Cadena de Amor');
     setShowPasswordSection(false);
     setOldPassword('');
     setNewPassword('');
@@ -434,6 +440,33 @@ export default function EditProfileModal({
                   <Text style={styles.validPhoneText}>✓ Valid phone number</Text>
                 </View>
               )}
+            </View>
+
+            {/* Preferred Branch */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Preferred Branch</Text>
+              <View style={styles.branchChipRow}>
+                {['Taguig Main - Cadena de Amor', 'BGC Branch', 'Makati Branch', 'Quezon City'].map((branch) => (
+                  <TouchableOpacity
+                    key={branch}
+                    style={[
+                      styles.branchChip,
+                      preferredBranch === branch && styles.branchChipSelected,
+                    ]}
+                    onPress={() => setPreferredBranch(branch)}
+                    disabled={isLoading}
+                  >
+                    <Text
+                      style={[
+                        styles.branchChipText,
+                        preferredBranch === branch && styles.branchChipTextSelected,
+                      ]}
+                    >
+                      {branch}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
             {/* Address */}
@@ -757,6 +790,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#10B981',
     fontWeight: '500',
+  },
+  branchChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  branchChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E8DCC8',
+    backgroundColor: '#FAF7F0',
+  },
+  branchChipSelected: {
+    borderColor: '#D4AF37',
+    backgroundColor: '#FDF6E3',
+  },
+  branchChipText: {
+    fontSize: 13,
+    color: '#6B5D4F',
+    fontWeight: '500',
+  },
+  branchChipTextSelected: {
+    color: '#1a1a1a',
+    fontWeight: '700',
   },
   passwordStatusContainer: {
     marginTop: 8,

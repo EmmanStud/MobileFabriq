@@ -1218,17 +1218,17 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
                   }} 
                 > 
                   <View style={styles.successModalOverlay}> 
-                    <View style={[styles.successModalContent, { alignItems: 'flex-start' }]}> 
+                    <View style={[styles.successModalContent, styles.reviewSuccessContent]}> 
                       {reviewSuccess ? ( 
                         <> 
-                          <Text style={[styles.successTitle, { fontSize: 20 }]}> 
+                          <Text style={[styles.successTitle, styles.reviewSuccessTitle]}> 
                             {selectedReviewRental?.hasReview ? 'Review Updated!' : 'Review Submitted!'} 
                           </Text> 
-                          <Text style={styles.successSubMessage}> 
+                          <Text style={[styles.successSubMessage, styles.reviewSuccessMessage]}> 
                             Thank you for your feedback on {selectedReviewRental?.gownName}. 
                           </Text> 
                           <TouchableOpacity 
-                            style={[styles.successButton, { marginTop: 16 }]} 
+                            style={[styles.successButton, styles.reviewSuccessButton]} 
                             onPress={() => { 
                               setReviewModalVisible(false); 
                               setReviewSuccess(false); 
@@ -1736,6 +1736,28 @@ const styles = StyleSheet.create({
   successSubMessage: { fontSize: 12, color: '#6B5D4F', marginBottom: 24, textAlign: 'center' },
   successButton: { backgroundColor: '#1a1a1a', paddingVertical: 14, paddingHorizontal: 32, borderRadius: 8, width: '100%' },
   successButtonText: { color: '#fff', fontSize: 14, fontWeight: '600', textTransform: 'uppercase', textAlign: 'center', letterSpacing: 0.5 },
+  reviewSuccessContent: {
+    alignItems: 'center',
+    width: '85%',
+    maxWidth: 400,
+  },
+  reviewSuccessTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#10b981',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  reviewSuccessMessage: {
+    width: '100%',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  reviewSuccessButton: {
+    width: '100%',
+    marginTop: 0,
+    alignSelf: 'stretch',
+  },
 
   // Calendar (web)
   calendarModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },

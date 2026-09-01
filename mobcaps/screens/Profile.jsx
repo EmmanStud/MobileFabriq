@@ -75,6 +75,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
     email: '',
     phone: '',
     address: '',
+    preferredBranch: 'Taguig Main - Cadena de Amor',
     memberSince: '',
   });
 
@@ -213,6 +214,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
           email: data.email || prev.email,
           phone: data.phoneNumber || '',
           address: data.address || '',
+          preferredBranch: data.preferredBranch || 'Taguig Main - Cadena de Amor',
           memberSince: data.createdAt 
             ? new Date(data.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) 
             : '',
@@ -609,6 +611,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
           lastName: updatedData.lastName,
           phoneNumber: updatedData.phone,
           address: updatedData.address,
+          preferredBranch: updatedData.preferredBranch,
         }),
       });
 
@@ -629,6 +632,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
         email: profileResult.email || prev.email,
         phone: profileResult.phoneNumber || prev.phone,
         address: profileResult.address || prev.address,
+        preferredBranch: profileResult.preferredBranch || prev.preferredBranch,
       }));
 
       // Update session
@@ -882,6 +886,13 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
                 </View>
               </View>
 
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Preferred Branch</Text>
+                <View style={styles.readOnlyField}>
+                  <Text style={styles.readOnlyFieldText}>{customerData.preferredBranch}</Text>
+                </View>
+              </View>
+
               <TouchableOpacity 
                 style={styles.editBtn}
                 onPress={() => setIsEditModalOpen(true)}
@@ -979,7 +990,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
             <View style={styles.tabContent}> 
               <View style={styles.favoritesHeader}> 
                 <Heart size={20} color="#6B5D4F" /> 
-                <Text style={styles.sectionTitle}>Favorite Gowns</Text> 
+                <Text style={styles.headerTitle}>Favorite Gowns</Text> 
               </View> 
               {favoritesLoading ? ( 
                 <ActivityIndicator size="small" color="#D4AF37" style={{ marginVertical: 20 }} /> 
@@ -1022,7 +1033,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
             <View style={styles.tabContent}> 
               <View style={styles.historyHeader}> 
                 <History size={20} color="#6B5D4F" /> 
-                <Text style={styles.sectionTitle}>Order History</Text> 
+                <Text style={styles.headerTitle}>Order History</Text> 
               </View> 
               {historyLoading ? ( 
                 <ActivityIndicator size="small" color="#D4AF37" style={{ marginVertical: 20 }} /> 
@@ -1224,6 +1235,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     marginBottom: 16,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 0,
   },
   formGroup: {
     marginBottom: 16,

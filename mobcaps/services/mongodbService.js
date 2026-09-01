@@ -732,17 +732,12 @@ export const mongodbService = {
     try {
       const session = await sessionService.getSession();
       if (!MONGODB_API_URL || !customerId || !session?.token) return null;
-      const response = await fetchAPI('/customers/measurements', {
+      const response = await fetchAPI(`/body-measurement/${customerId}`, {
         headers: { Authorization: `Bearer ${session.token}` },
       });
       const data = await response.json().catch(() => null);
-      if (response.ok) {
-        return {
-          ...data,
-          chest: data?.chest ?? data?.bust ?? null,
-          armLength: data?.armLength ?? data?.sleeveLength ?? null,
-          measuredAt: data?.measuredAt || data?.updatedAt || null,
-        };
+      if (response.ok && data?.success) {
+        return data.profile;
       }
       return null;
     } catch (err) {
@@ -755,18 +750,17 @@ export const mongodbService = {
   async updateMeasurements(measurements, token) {
     try {
       if (!MONGODB_API_URL || !token) return { success: false, error: 'Not authenticated' };
-      const url = this._buildUrl('/customers/measurements');
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(measurements),
+      const session = await sessionService.getSession();
+      const customerId = session?.userId;
+      if (!customerId) return { success: false, error: 'Not authenticated' };
+      const response = await fetchAPI('/body-measurement/save', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ customerId, measurements }),
       });
       const data = await response.json();
-      if (response.ok) return { success: true, measurements: data.measurements || data };
-      return { success: false, error: data.message || 'Failed to save measurements' };
+      if (response.ok && data?.success) return { success: true, measurements: data.profile };
+      return { success: false, error: data.error || 'Failed to save measurements' };
     } catch (err) {
       return { success: false, error: err.message || 'Connection failed' };
     }

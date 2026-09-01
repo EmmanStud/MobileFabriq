@@ -13,7 +13,7 @@ import { buildGownPrompt, submitGownGeneration, pollGownTask } from '../services
 import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const LOCAL_SERVER = 'fabriq-3d-server-production.up.railway.app';
+const LOCAL_SERVER = 'https://fabriq-3d-server-production.up.railway.app';
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
 

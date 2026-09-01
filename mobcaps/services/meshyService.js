@@ -1,11 +1,10 @@
 /**
  * meshyService.js
- * Handles Meshy Text→3D API calls for GownDesigner3D
- * API Docs: https://docs.meshy.ai/api-text-to-3d
+ * Handles gown generation via our own backend, which proxies Meshy Text→3D.
+ * The Meshy API key never lives in this app — see backend gownDesignerController.js
  */
-
-const MESHY_API_KEY = process.env.EXPO_PUBLIC_MESHY_API_KEY;
-const MESHY_BASE_URL = 'https://api.meshy.ai/openapi/v2';
+import { fetchAPI } from './apiConfig';
+import { sessionService } from './sessionService';
 
 /**
  * Build a descriptive prompt from the user's customization choices
@@ -27,35 +26,29 @@ export const buildGownPrompt = (design) => {
 };
 
 /**
- * Submit a Text→3D generation task to Meshy
+ * Submit a Text→3D generation task via our backend
  * Returns the task ID
  */
 export const submitGownGeneration = async (prompt) => {
-  const response = await fetch(`${MESHY_BASE_URL}/text-to-3d`, {
+  const session = await sessionService.getSession();
+  const response = await fetchAPI('/gown-designer/generate', {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${MESHY_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      mode: 'preview',
-      prompt,
-      art_style: 'realistic',
-      negative_prompt: 'low quality, blurry, person, body, mannequin, background, ugly',
-    }),
+    headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined,
+    body: JSON.stringify({ prompt }),
   });
 
   if (!response.ok) {
     const err = await response.text();
-    throw new Error(`Meshy submit failed: ${response.status} — ${err}`);
+    throw new Error(`Gown generation submit failed: ${response.status} — ${err}`);
   }
 
   const data = await response.json();
-  return data.result; // task ID string
+  if (!data.success) throw new Error(data.error || 'Gown generation submit failed');
+  return data.taskId;
 };
 
 /**
- * Poll Meshy for task status until succeeded or failed
+ * Poll our backend for task status until succeeded or failed
  * Calls onProgress(percent, message) every poll cycle
  */
 export const pollGownTask = async (taskId, onProgress) => {
@@ -72,33 +65,37 @@ export const pollGownTask = async (taskId, onProgress) => {
     'Almost ready...',
   ];
 
+  const session = await sessionService.getSession();
+
   for (let i = 0; i < MAX_POLLS; i++) {
     await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
 
-    const response = await fetch(`${MESHY_BASE_URL}/text-to-3d/${taskId}`, {
-      headers: { 'Authorization': `Bearer ${MESHY_API_KEY}` },
+    const response = await fetchAPI(`/gown-designer/status/${taskId}`, {
+      headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined,
     });
 
-    if (!response.ok) throw new Error(`Meshy poll failed: ${response.status}`);
+    if (!response.ok) throw new Error(`Gown generation status check failed: ${response.status}`);
 
     const data = await response.json();
-    const percent = data.progress || Math.min((i / MAX_POLLS) * 95, 95);
+    if (!data.success) throw new Error(data.error || 'Gown generation status check failed');
+
+    const percent = data.progress ?? Math.min((i / MAX_POLLS) * 95, 95);
     const message = progressMessages[Math.floor(i / 8) % progressMessages.length];
 
     if (onProgress) onProgress(Math.round(percent), message);
 
     if (data.status === 'SUCCEEDED') {
       return {
-        modelUrl: data.model_urls?.glb || data.model_urls?.obj || null,
-        thumbnailUrl: data.thumbnail_url || null,
+        modelUrl: data.modelUrl,
+        thumbnailUrl: data.thumbnailUrl,
         taskId,
       };
     }
 
     if (data.status === 'FAILED' || data.status === 'EXPIRED') {
-      throw new Error(`Meshy generation failed: ${data.task_error?.message || 'Unknown error'}`);
+      throw new Error(`Gown generation failed: ${data.errorMessage || 'Unknown error'}`);
     }
   }
 
-  throw new Error('Meshy generation timed out after 5 minutes.');
+  throw new Error('Gown generation timed out after 5 minutes.');
 };

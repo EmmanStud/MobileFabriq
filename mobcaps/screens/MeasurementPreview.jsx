@@ -63,10 +63,10 @@ export default function MeasurementPreview({ navigation, route }) {
         if (validNumber(measurements[key])) numericMeasurements[key] = measurements[key];
       });
 
-      const response = await fetchAPI('/customers/measurements', {
-        method: 'PUT',
+      const response = await fetchAPI('/body-measurement/save', {
+        method: 'POST',
         headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined,
-        body: JSON.stringify({ height, ...numericMeasurements }),
+        body: JSON.stringify({ customerId, measurements: { height, ...numericMeasurements } }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
