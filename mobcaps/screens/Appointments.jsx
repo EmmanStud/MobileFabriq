@@ -6,12 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   TextInput,
   Modal,
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { Calendar, Clock, MapPin, ChevronRight, Menu } from 'lucide-react-native';
 import HamburgerMenu from '../components/HamburgerMenu';
@@ -659,11 +659,17 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
                   {/* Date / Time / Branch */}
                   <View style={styles.formCol}>
                     <Text style={styles.label}>Date *</Text>
-                    <TouchableOpacity style={styles.input} onPress={handleDatePickerOpen}>
+                    <TouchableOpacity
+                      style={[styles.input, validationErrors.date && styles.inputError]}
+                      onPress={handleDatePickerOpen}
+                    >
                       <View>
                         <Text style={{ color: formData.date ? '#1a1a1a' : '#999' }}>{formData.date || 'Select date'}</Text>
                       </View>
                     </TouchableOpacity>
+                    {validationErrors.date && (
+                      <Text style={styles.errorMessage}>{validationErrors.date}</Text>
+                    )}
                   </View>
 
                   <View style={styles.formCol}>

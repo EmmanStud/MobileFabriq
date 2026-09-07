@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
-  SafeAreaView,
   Modal,
   Platform,
   Image,
@@ -15,6 +14,7 @@ import {
   AppState,
   Linking,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { Calendar, MapPin, ShoppingBag, ChevronRight, Star } from 'lucide-react-native';
@@ -1674,7 +1674,7 @@ const styles = StyleSheet.create({
 
   // Gown summary (Step 1)
   gownSummaryCard: { backgroundColor: '#F5F1E8', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#E8DCC8' },
-  gownSummaryImage: { width: '100%', height: 220, resizeMode: 'cover' },
+  gownSummaryImage: { width: '100%', aspectRatio: 0.85, resizeMode: 'cover' },
   gownSummaryInfo: { padding: 16 },
   gownSummaryName: { fontSize: 20, fontFamily: 'serif', fontWeight: 'bold', color: '#1a1a1a', marginBottom: 6 },
   gownSummaryMeta: { fontSize: 13, color: '#6B5D4F', marginBottom: 8 },

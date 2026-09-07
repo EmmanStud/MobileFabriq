@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'; 
 import { AppState, TouchableOpacity, View, StyleSheet } from 'react-native'; 
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native'; 
 import { createNativeStackNavigator } from '@react-navigation/native-stack'; 
 import { MessageCircle } from 'lucide-react-native';
@@ -28,13 +29,14 @@ const POLL_INTERVAL_MS = 30000;
 
 function FloatingChatButton({ isLoaded, chatVisible, setChatVisible }) {
   const { chatHidden } = useChatVisibility();
+  const insets = useSafeAreaInsets();
 
   if (!isLoaded || chatHidden) return null;
 
   return (
     <>
       {/* Floating Chat Button */}
-      <View style={chatStyles.floatingContainer} pointerEvents="box-none">
+      <View style={[chatStyles.floatingContainer, { bottom: 32 + insets.bottom }]} pointerEvents="box-none">
         <TouchableOpacity
           style={chatStyles.floatingBtn}
           onPress={() => setChatVisible(true)}
@@ -149,7 +151,8 @@ export default function App() {
   const handleNotificationRead = () => { if (authToken) fetchUnreadCount(authToken); }; 
  
   return (
-    <ChatVisibilityProvider>
+    <SafeAreaProvider>
+      <ChatVisibilityProvider>
       <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}> 
         {!isLoaded ? ( 
@@ -202,14 +205,14 @@ export default function App() {
         chatVisible={chatVisible}
         setChatVisible={setChatVisible}
       />
-    </ChatVisibilityProvider>
+      </ChatVisibilityProvider>
+    </SafeAreaProvider>
   );
 } 
 
 const chatStyles = StyleSheet.create({
   floatingContainer: {
     position: 'absolute',
-    bottom: 32,
     right: 24,
     zIndex: 999,
     elevation: 999,

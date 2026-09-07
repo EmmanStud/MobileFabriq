@@ -5,7 +5,6 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   Modal,
   TextInput,
   Platform,
@@ -16,6 +15,7 @@ import {
   Animated,
   Alert,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Palette, Upload, Ruler, ChevronRight, CheckCircle2, Menu, X, ShoppingBag, Instagram, Facebook, Mail, ArrowRight, Calendar, Camera as CameraIcon, Sparkles, RotateCw, ZoomIn, ZoomOut, Maximize2, Move } from 'lucide-react-native';
 import Svg, { Path, Line, Circle, Defs, LinearGradient, RadialGradient, Stop, G } from 'react-native-svg';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -31,21 +31,11 @@ import Header from '../components/Header';
 import CustomAlertModal from '../components/CustomAlertModal';
 import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 import { showAlert } from '../services/platformService';
+import { useResponsive } from '../utils/responsive';
+import { GOWN_COLORS } from '../constants/gownColors';
 
 // Reusable color and fabric options
-const colorOptions = [
-  'Ivory',
-  'White',
-  'Blush Pink',
-  'Navy Blue',
-  'Gold',
-  'Silver',
-  'Rose Gold',
-  'Black',
-  'Champagne',
-  'Sage Green',
-  'Custom/Other',
-];
+const colorOptions = GOWN_COLORS.map(c => c.name);
 
 const fabricOptions = [
   'Silk',
@@ -160,6 +150,11 @@ const COLOR_HEX_MAP = {
 };
 
 export default function Bespoke({ navigation, route, unreadCount = 0 }) {
+  const { scale } = useResponsive();
+  const OVAL_WIDTH = scale(240);
+  const OVAL_HEIGHT = OVAL_WIDTH * 1.25; // preserves the original 240:300 aspect ratio
+  const insets = useSafeAreaInsets();
+
   const { setChatHidden } = useChatVisibility();
   const [activeTab, setActiveTab] = useState('new');
   const [menuVisible, setMenuVisible] = useState(false);
@@ -726,6 +721,31 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
     designImage: null,
     designImageUrl: '',
   });
+
+  // Receive the 3D design result back from GownDesigner3D (passed as a
+  // serializable param instead of a callback function)
+  useEffect(() => {
+    const result = route.params?.design3DResult;
+    if (result) {
+      setDesign3DData(result);
+      setFormData(prev => ({
+        ...prev,
+        preferredColors: result.color || prev.preferredColors,
+        fabricPreference: result.fabric || prev.fabricPreference,
+        budget: result.estimatedCost
+          ? `₱${result.estimatedCost.toLocaleString('en-PH')}`
+          : prev.budget,
+        specialRequests: prev.specialRequests
+          ? prev.specialRequests
+          : `3D Design: ${result.silhouette} in ${result.color} ${result.fabric}${result.addOns?.length ? ' with ' + result.addOns.join(', ') : ''}`,
+        // Auto-fill the Design Inspiration image with the 3D-generated thumbnail,
+        // but don't overwrite a photo the user already picked manually
+        designImageUrl: prev.designImageUrl || result.thumbnailUrl || prev.designImageUrl,
+      }));
+      // Clear the param so this doesn't re-apply if Bespoke re-renders again later
+      navigation.setParams({ design3DResult: undefined });
+    }
+  }, [route.params?.design3DResult]);
 
   useEffect(() => {
     const loadGowns = async () => {
@@ -1366,22 +1386,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
                     </Text>
                     <TouchableOpacity 
                       style={styles.designer3DBtn} 
-                      onPress={() => navigation.navigate('GownDesigner3D', { 
-                        onDesignComplete: (summary) => { 
-                          setDesign3DData(summary); 
-                          setFormData(prev => ({ 
-                            ...prev, 
-                            preferredColors: summary.color || prev.preferredColors, 
-                            fabricPreference: summary.fabric || prev.fabricPreference, 
-                            budget: summary.estimatedCost 
-                              ? `₱${summary.estimatedCost.toLocaleString('en-PH')}` 
-                              : prev.budget, 
-                            specialRequests: prev.specialRequests 
-                              ? prev.specialRequests 
-                              : `3D Design: ${summary.silhouette} in ${summary.color} ${summary.fabric}${summary.addOns?.length ? ' with ' + summary.addOns.join(', ') : ''}`, 
-                          })); 
-                        } 
-                      })}
+                      onPress={() => navigation.navigate('GownDesigner3D')}
                     >
                       <Text style={styles.designer3DBtnText}>Try Designer</Text>
                       <ChevronRight size={14} color="#1a1a1a" />
@@ -2388,7 +2393,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
                 <View style={[styles.faceFrameSideOverlay, { right: 0, left: undefined }]} />
 
                 {/* The oval face guide */}
-                <View style={styles.faceOval}>
+                <View style={[styles.faceOval, { width: OVAL_WIDTH, height: OVAL_HEIGHT, borderRadius: OVAL_HEIGHT / 2 }]}> 
 
                   {/* Corner brackets — top left */}
                   <View style={[styles.cornerBracket, styles.cornerTL]} />
@@ -2413,7 +2418,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
                       transform: [{
                         translateY: scanLineAnim.interpolate({
                           inputRange: [0, 1],
-                          outputRange: [0, 280],
+                          outputRange: [0, OVAL_HEIGHT - 20],
                         })
                       }]
                     }
@@ -2612,7 +2617,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       {/* Floating AI Skin Tone Button */}
       {activeTab === 'new' && (
         <TouchableOpacity
-          style={styles.floatingAIBtn}
+          style={[styles.floatingAIBtn, { bottom: insets.bottom + 106 }]}
           onPress={() => setShowAIModal(true)}
           activeOpacity={0.85}
         >
@@ -3171,7 +3176,6 @@ const styles = StyleSheet.create({
   },
   floatingAIBtn: {
     position: 'absolute',
-    bottom: 100,
     right: 20,
     width: 56,
     height: 56,
@@ -3278,7 +3282,7 @@ const styles = StyleSheet.create({
   },
   aiPhotoWrapper: {
     width: '100%',
-    height: 260,
+    aspectRatio: 1.3,
     position: 'relative',
   },
   aiPhoto: {
@@ -3607,7 +3611,7 @@ const styles = StyleSheet.create({
   },
   aiGownImageBox: {
     width: '100%',
-    height: 180,
+    aspectRatio: 0.89,
     marginTop: 22,
   },
   aiGownImage: {
@@ -4397,9 +4401,6 @@ const styles = StyleSheet.create({
 
   // Oval face guide
   faceOval: {
-    width: 240,
-    height: 300,
-    borderRadius: 120,
     borderWidth: 2,
     borderColor: '#D4AF37',
     backgroundColor: 'transparent',

@@ -5,13 +5,13 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   Modal,
   TextInput,
   Platform,
   Image,
   FlatList,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, MapPin, Menu, X, ShoppingBag, Ruler, User, ChevronRight, ArrowRight, Heart, Instagram, Facebook, Mail } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { sessionService } from '../services/sessionService';

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useChatVisibility } from '../contexts/ChatVisibilityContext';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { API_URL } from '../services/apiConfig';
 
 export default function VerifyEmail({ navigation, route }) {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Animated, SafeAreaView } from "react-native";
+import { View, Text, StyleSheet, Animated } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SplashScreen({ onComplete }) {
   const [progress, setProgress] = useState(0);

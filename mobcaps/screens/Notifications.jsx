@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'; 
 import { 
   View, Text, ScrollView, TouchableOpacity, 
-  StyleSheet, SafeAreaView, ActivityIndicator, 
+  StyleSheet, ActivityIndicator,
   RefreshControl, StatusBar, 
 } from 'react-native'; 
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bell, Package, Calendar, Scissors, CheckCircle, ChevronRight } from 'lucide-react-native'; 
 import { sessionService } from '../services/sessionService'; 
 import { mongodbService } from '../services/mongodbService'; 

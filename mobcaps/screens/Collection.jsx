@@ -6,13 +6,13 @@ import {
     TouchableOpacity,
     Image,
     StyleSheet,
-    SafeAreaView,
     Modal,
     TextInput,
     FlatList,
     Platform,
     ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Search, Heart, Calendar, MapPin, Star, Menu, ArrowRight, Instagram, Facebook, Mail, X, ShoppingBag, Ruler, User } from 'lucide-react-native';
 import { sessionService } from '../services/sessionService';
@@ -753,7 +753,7 @@ const styles = StyleSheet.create({
     results: { color: '#6B5D4F', marginVertical: 8 },
     column: { justifyContent: 'space-between' },
     card: { backgroundColor: '#fff', width: '48%', marginBottom: 16, borderRadius: 6, overflow: 'hidden' },
-    imageWrap: { height: 220, backgroundColor: '#F5F1E8' },
+    imageWrap: { aspectRatio: 0.78, backgroundColor: '#F5F1E8' },
     cardImage: { width: '100%', height: '100%' },
     badge: { position: 'absolute', top: 8, left: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
     badgeText: { color: '#fff', fontSize: 11, textTransform: 'uppercase' },

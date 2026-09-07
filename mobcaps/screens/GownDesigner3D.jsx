@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  SafeAreaView, ActivityIndicator, Dimensions,
+  ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import {
   ChevronRight, ChevronLeft, X, RotateCw,
@@ -11,8 +12,9 @@ import {
 } from 'lucide-react-native';
 import { buildGownPrompt, submitGownGeneration, pollGownTask } from '../services/meshyService';
 import { useChatVisibility } from '../contexts/ChatVisibilityContext';
+import { useResponsive } from '../utils/responsive';
+import { GOWN_COLORS } from '../constants/gownColors';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const LOCAL_SERVER = 'https://fabriq-3d-server-production.up.railway.app';
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
@@ -60,20 +62,7 @@ const silhouettes = [
   },
 ];
 
-const colors = [
-  { name: 'Ivory White',  hex: '#FFFFF0' },
-  { name: 'Blush Pink',   hex: '#FFB6C1' },
-  { name: 'Rose Gold',    hex: '#B76E79' },
-  { name: 'Champagne',    hex: '#D4AF37' },
-  { name: 'Emerald',      hex: '#50C878' },
-  { name: 'Royal Blue',   hex: '#4169E1' },
-  { name: 'Burgundy',     hex: '#800020' },
-  { name: 'Lavender',     hex: '#C9A0DC' },
-  { name: 'Midnight',     hex: '#191970' },
-  { name: 'Coral',        hex: '#FF7F50' },
-  { name: 'Pearl',        hex: '#F0EAD6' },
-  { name: 'Sage Green',   hex: '#B2AC88' },
-];
+const colors = GOWN_COLORS;
 
 const fabrics = [
   { id: 'satin',   name: 'Satin',   price: 2000, note: 'Smooth & lustrous' },
@@ -144,7 +133,7 @@ const formatPeso = (amount) =>
 
 export default function GownDesigner3D({ navigation, route }) {
   const { setChatHidden } = useChatVisibility();
-  const { onDesignComplete } = route.params || {};
+  const { width: SCREEN_WIDTH, verticalScale } = useResponsive();
   const colorPreviewRef = useRef(null);
   const fabricPreviewRef = useRef(null);
   const generatedWebViewRef = useRef(null);
@@ -162,6 +151,7 @@ export default function GownDesigner3D({ navigation, route }) {
   const [genProgress, setGenProgress] = useState(0);
   const [genMessage, setGenMessage] = useState('Preparing your design...');
   const [generatedModelUrl, setGeneratedModelUrl] = useState(null);
+  const [generatedThumbnailUrl, setGeneratedThumbnailUrl] = useState(null);
   const [pendingColorForGenerated, setPendingColorForGenerated] = useState(null);
   const [genError, setGenError] = useState(null);
 
@@ -241,6 +231,7 @@ export default function GownDesigner3D({ navigation, route }) {
       });
 
       setGeneratedModelUrl(result.modelUrl);
+      setGeneratedThumbnailUrl(result.thumbnailUrl || null);
       setPendingColorForGenerated(design.color?.hex || null);
       setGenProgress(100);
       setGenMessage('Your gown is ready! ✨');
@@ -260,18 +251,21 @@ export default function GownDesigner3D({ navigation, route }) {
       addOns: design.addOns.map(a => a.name),
       estimatedCost: totalCost,
       modelUrl: generatedModelUrl,
+      thumbnailUrl: generatedThumbnailUrl,
       prompt: buildGownPrompt(design),
     };
 
-    if (onDesignComplete) {
-      onDesignComplete(designSummary);
-    }
-    navigation.goBack();
+    navigation.navigate({
+      name: 'Bespoke',
+      params: { design3DResult: designSummary },
+      merge: true,
+    });
   };
 
   // ── Redesign ──
   const handleRedesign = () => {
     setGeneratedModelUrl(null);
+    setGeneratedThumbnailUrl(null);
     setGenError(null);
     setStep(1);
     setDesign({ silhouette: null, color: null, fabric: null, addOns: [] });
@@ -340,7 +334,7 @@ export default function GownDesigner3D({ navigation, route }) {
           <Text style={s.previewLabel}>Preview</Text>
           <WebView
             source={{ uri: `${LOCAL_SERVER}/viewer?url=${encodeURIComponent(design.silhouette.modelUrl)}` }}
-            style={s.previewWebview}
+            style={[s.previewWebview, { height: verticalScale(300) }]}
             javaScriptEnabled={true}
             domStorageEnabled={true}
             allowsInlineMediaPlayback={true}
@@ -386,7 +380,7 @@ export default function GownDesigner3D({ navigation, route }) {
               design.silhouette?.modelUrl || ''
             )}`,
           }}
-          style={s.liveWebview}
+          style={[s.liveWebview, { height: verticalScale(280) }]}
           javaScriptEnabled={true}
           domStorageEnabled={true}
           allowsInlineMediaPlayback={true}
@@ -412,7 +406,7 @@ export default function GownDesigner3D({ navigation, route }) {
           return (
             <TouchableOpacity
               key={c.name}
-              style={[s.colorCard, selected && s.colorCardSelected]}
+              style={[s.colorCard, { width: (SCREEN_WIDTH - 32 - 30) / 3 }, selected && s.colorCardSelected]}
               onPress={() => {
                 setDesign(prev => ({ ...prev, color: c }));
                 sendColorToViewer(c.hex);
@@ -457,7 +451,7 @@ export default function GownDesigner3D({ navigation, route }) {
         <WebView
           ref={fabricPreviewRef}
           source={{ uri: `${LOCAL_SERVER}/viewer?url=${encodeURIComponent(design.silhouette?.modelUrl || '')}` }}
-          style={s.liveWebview}
+          style={[s.liveWebview, { height: verticalScale(280) }]}
           javaScriptEnabled={true}
           domStorageEnabled={true}
           allowsInlineMediaPlayback={true}
@@ -619,7 +613,7 @@ export default function GownDesigner3D({ navigation, route }) {
             source={{
               uri: `${LOCAL_SERVER}/viewer?url=${encodeURIComponent(generatedModelUrl || '')}`
             }}
-            style={s.webview}
+            style={[s.webview, { height: verticalScale(340) }]}
             javaScriptEnabled={true}
             domStorageEnabled={true}
             allowsInlineMediaPlayback={true}
@@ -801,7 +795,6 @@ const s = StyleSheet.create({
   // Color Grid
   colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   colorCard: {
-    width: (SCREEN_WIDTH - 32 - 30) / 3,
     backgroundColor: '#fff', borderWidth: 2, borderColor: '#E8DCC8',
     borderRadius: 2, padding: 10, alignItems: 'center', position: 'relative',
   },
@@ -922,7 +915,7 @@ const s = StyleSheet.create({
   // WebView Viewer
   viewerContainer: { marginBottom: 16 },
   viewerLabel: { fontFamily: 'serif', fontSize: 16, color: '#1a1a1a', marginBottom: 10, textAlign: 'center' },
-  webview: { width: '100%', height: 340, backgroundColor: '#0d0d0d' },
+  webview: { width: '100%', backgroundColor: '#0d0d0d' },
   viewerActions: { flexDirection: 'row', gap: 12, marginTop: 14 },
   redesignBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
@@ -974,7 +967,6 @@ const s = StyleSheet.create({
   },
   liveWebview: {
     width: '100%',
-    height: 280,
     backgroundColor: '#111111',
   },
   colorGridLabel: {
@@ -1005,7 +997,6 @@ const s = StyleSheet.create({
   },
   previewWebview: {
     width: '100%',
-    height: 300,
     backgroundColor: '#111111',
   },
   previewHint: {

@@ -3,9 +3,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { 
   View, Text, ScrollView, TouchableOpacity, Image, 
-  StyleSheet, SafeAreaView, Modal, TextInput, FlatList, Dimensions,
+  StyleSheet, Modal, TextInput, FlatList, Dimensions,
   KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   Menu, X, ArrowRight, ShoppingBag, Calendar, 
   Ruler, Heart, User, Sparkles, Instagram, Mail, Facebook, Eye, EyeOff, ChevronLeft, ChevronRight
@@ -27,6 +28,7 @@ import Header from '../components/Header';
 import { useResendTimer } from '../hooks/useResendTimer';
 import { useNotifications } from '../hooks/useNotifications';
 import { useChatVisibility } from '../contexts/ChatVisibilityContext';
+import { useResponsive } from '../utils/responsive';
 
 // Local Assets
 import Home1Image from '../assets/Home1Image.png'; 
@@ -183,6 +185,7 @@ const accountTermsSections = [
 
 export default function Home({ navigation, route, onLogin, onLogout, unreadCount = 0 }) {
   const { setChatHidden } = useChatVisibility();
+  const { moderateScale } = useResponsive();
 
   // Carousel States
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -1012,9 +1015,11 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         
         {/* SECTION 1: HERO */}
         <View style={styles.section}>
-          <Text style={styles.tagline}>ELEGANT  •  BESPOKE  •  TIMELESS</Text>
-          <Text style={styles.mainTitle}>Where{"\n"}Craftsmanship{"\n"}Meets Dreams</Text>
-          <Text style={styles.description}>
+          <Text style={[styles.tagline, { fontSize: moderateScale(10) }]}>ELEGANT  •  BESPOKE  •  TIMELESS</Text>
+          <Text style={[styles.mainTitle, { fontSize: moderateScale(44), lineHeight: moderateScale(50) }]}> 
+            Where Craftsmanship Meets Dreams
+          </Text>
+          <Text style={[styles.description, { fontSize: moderateScale(15) }]}> 
             Experience the art of bespoke tailoring at Hannah Vanessa Boutique. 
             From exquisite gown rentals to custom creations, we bring your vision to life.
           </Text>
@@ -1037,7 +1042,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
         {/* SECTION 2: THE COLLECTION */}
         <View style={[styles.section, styles.whiteBg]}>
           <Text style={styles.tagline}>THE COLLECTION</Text>
-          <Text style={styles.sectionTitle}>Curated Excellence</Text>
+          <Text style={[styles.sectionTitle, { fontSize: moderateScale(32) }]}>Curated Excellence</Text>
           <Text style={styles.description}>
             Our collection features handpicked gowns from renowned designers, each piece selected for its exceptional craftsmanship.
           </Text>
@@ -1050,7 +1055,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
 
         {/* SECTION 3: OUR SERVICES */}
         <View style={styles.servicesSection}>
-          <Text style={styles.servicesHeader}>Our Services</Text>
+          <Text style={[styles.servicesHeader, { fontSize: moderateScale(32) }]}>Our Services</Text>
           <Text style={styles.servicesSub}>
             From ready-to-wear collections to fully customized pieces, we provide a seamless experience.
           </Text>
@@ -1900,7 +1905,7 @@ const styles = StyleSheet.create({
   imageWrapper: { marginTop: 40, position: 'relative' },
   heroImage: { width: '100%', aspectRatio: 0.72 },
   collectionImage: { width: '100%', aspectRatio: 0.9, marginTop: 20 },
-  clientBadge: { position: 'absolute', bottom: -10, left: -10, backgroundColor: '#FFF', padding: 20, elevation: 5 },
+  clientBadge: { position: 'absolute', bottom: -10, left: -10, maxWidth: '75%', backgroundColor: '#FFF', padding: 20, elevation: 5 },
   badgeSub: { fontSize: 10, color: '#6B5D4F' },
   badgeMain: { fontSize: 18, fontFamily: 'serif', marginTop: 5 },
   servicesSection: { padding: 25, backgroundColor: '#FAF7F0' },
@@ -2028,15 +2033,16 @@ legalText: {
     width: '100%',
     maxWidth: 460,
     maxHeight: '88%',
+    flexShrink: 1,
     alignSelf: 'center',
     backgroundColor: '#FAF7F0',
     borderRadius: 2,
     overflow: 'hidden',
   },
   authScrollView: {
+    flexShrink: 1,
     width: '100%',
     maxWidth: 460,
-    maxHeight: '100%',
     alignSelf: 'center',
     backgroundColor: '#FAF7F0',
   },

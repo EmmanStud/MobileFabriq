@@ -6,10 +6,10 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   TextInput,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, History, Heart, Camera } from 'lucide-react-native';
 import HamburgerMenu from '../components/HamburgerMenu';
 import Header from '../components/Header';

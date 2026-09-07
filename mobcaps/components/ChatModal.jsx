@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
-  Modal, SafeAreaView, KeyboardAvoidingView, Platform,
+  Modal, KeyboardAvoidingView, Platform,
   ActivityIndicator, StyleSheet, Linking, Keyboard,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Send, MessageCircle } from 'lucide-react-native';
 import { sendChatMessage, getChatbotReply, getOrCreateGuestToken } from '../services/chatService';
 import { sessionService } from '../services/sessionService';
