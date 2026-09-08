@@ -56,20 +56,29 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
   const [rescheduleErrors, setRescheduleErrors] = useState({});
   const [rescheduling, setRescheduling] = useState(false);
   const [rescheduleTakenTimes, setRescheduleTakenTimes] = useState([]);
+  const [rescheduleOriginal, setRescheduleOriginal] = useState({ date: '', time: '' });
 
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelAppointmentId, setCancelAppointmentId] = useState(null);
+  const [cancellationReason, setCancellationReason] = useState('');
+  const [cancellationError, setCancellationError] = useState('');
+  const [cancellingAppointment, setCancellingAppointment] = useState(false);
+  const [showRescheduleDatePicker, setShowRescheduleDatePicker] = useState(false);
 
   const [availableGowns, setAvailableGowns] = useState([]);
   const [showGownModal, setShowGownModal] = useState(false);
 
   useEffect(() => {
+    if (route?.params?.activeTab) setActiveTab(route.params.activeTab);
+  }, [route?.params?.activeTab]);
+
+  useEffect(() => {
     const anyActivityOpen =
       menuVisible || showDatePicker || showBranchModal || showTimeModal ||
-      showSuccessModal || showRescheduleModal || showCancelConfirm || showGownModal;
+      showSuccessModal || showRescheduleModal || showCancelConfirm || showGownModal || showRescheduleDatePicker;
     setChatHidden(anyActivityOpen);
     return () => setChatHidden(false);
-  }, [menuVisible, showDatePicker, showBranchModal, showTimeModal, showSuccessModal, showRescheduleModal, showCancelConfirm, showGownModal, setChatHidden]);
+  }, [menuVisible, showDatePicker, showBranchModal, showTimeModal, showSuccessModal, showRescheduleModal, showCancelConfirm, showGownModal, showRescheduleDatePicker, setChatHidden]);
   const [selectedGownId, setSelectedGownId] = useState('');
   const [selectedGownName, setSelectedGownName] = useState('');
 
@@ -162,6 +171,61 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
     } finally {
       setRescheduling(false);
     }
+  };
+
+  const handleCancelAppointment = async () => {
+    if (!cancellationReason.trim()) {
+      setCancellationError('Please provide a cancellation reason.');
+      return;
+    }
+    setCancellingAppointment(true);
+    setCancellationError('');
+    try {
+      const session = await sessionService.getSession();
+      const token = session?.token || authToken;
+      const res = await mongodbService.cancelAppointment(cancelAppointmentId, cancellationReason.trim(), token);
+      if (res.success) {
+        setShowCancelConfirm(false);
+        setCancelAppointmentId(null);
+        setCancellationReason('');
+        await fetchUserAppointments(userEmail);
+        showAlert('Success', 'Appointment cancelled successfully!');
+      } else {
+        console.warn('[APPOINTMENT CANCELLATION DEBUG]', {
+          appointmentId: cancelAppointmentId,
+          status: res.status,
+          error: res.error,
+          responseBody: res.body,
+        });
+        setCancellationError(res.error || 'Failed to cancel appointment.');
+      }
+    } catch (err) {
+      console.error('[APPOINTMENT CANCELLATION DEBUG]', { appointmentId: cancelAppointmentId, error: err.message });
+      setCancellationError(err.message || 'Failed to cancel appointment.');
+    } finally {
+      setCancellingAppointment(false);
+    }
+  };
+
+  const handleRescheduleDateConfirm = (date) => {
+    const dateStr = getLocalDateString(date);
+    setRescheduleData(prev => ({ ...prev, date: dateStr, time: '' }));
+    setRescheduleTakenTimes([]);
+    setRescheduleErrors(prev => {
+      const next = { ...prev };
+      delete next.date;
+      return next;
+    });
+    setShowRescheduleDatePicker(false);
+    mongodbService.getAvailability(dateStr, '', rescheduleData.branch)
+      .then(resp => {
+        const bookedTimes = resp?.bookedTimes || [];
+        const sameAppointmentDate = dateStr === rescheduleOriginal.date;
+        setRescheduleTakenTimes(sameAppointmentDate
+          ? bookedTimes.filter(time => time !== rescheduleOriginal.time)
+          : bookedTimes);
+      })
+      .catch(err => console.warn('[APPOINTMENT RESCHEDULE DEBUG] availability failed:', err.message));
   };
 
   const getAppointmentTypeLabel = (type) => {
@@ -768,13 +832,14 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
                     </View>
                   ) : null}
 
-                  {appointment.status === 'scheduled' && (
+                  {['pending', 'scheduled'].includes(appointment.status) && (
                     <View style={styles.appActionsRow}>
                       <TouchableOpacity 
                         style={styles.actionBtn}
                         onPress={() => {
                           setRescheduleAppointmentId(appointment.id);
                           setRescheduleData({ date: '', time: '', branch: appointment.branch || 'Taguig Main', reason: '' });
+                          setRescheduleOriginal({ date: appointment.date || '', time: appointment.time || '' });
                           setRescheduleErrors({});
                           setRescheduleTakenTimes([]);
                           setShowRescheduleModal(true);
@@ -786,6 +851,8 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
                         style={[styles.actionBtn, { borderColor: '#FCD34D', backgroundColor: '#FFF7ED' }]}
                         onPress={() => {
                           setCancelAppointmentId(appointment.id);
+                          setCancellationReason('');
+                          setCancellationError('');
                           setShowCancelConfirm(true);
                         }}
                       >
@@ -1106,20 +1173,28 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
             <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
               <Text style={styles.branchModalTitle}>Reschedule Appointment</Text>
 
-              <Text style={[styles.label, { marginTop: 8 }]}>New Date * (YYYY-MM-DD)</Text>
-              <TextInput
+              <Text style={[styles.label, { marginTop: 8 }]}>New Date *</Text>
+              <TouchableOpacity
                 style={styles.input}
-                placeholder="YYYY-MM-DD"
-                value={rescheduleData.date}
-                onChangeText={(val) => {
-                  setRescheduleData(prev => ({ ...prev, date: val }));
-                  if (val.length === 10) {
-                    mongodbService.getAvailability(val, '', rescheduleData.branch)
-                      .then(resp => setRescheduleTakenTimes(resp?.bookedTimes || []));
-                  }
-                }}
-                keyboardType="numbers-and-punctuation"
-              />
+                onPress={() => setShowRescheduleDatePicker(true)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Calendar size={18} color="#6B5D4F" />
+                  <Text style={{ color: rescheduleData.date ? '#1a1a1a' : '#9CA3AF' }}>
+                    {rescheduleData.date || 'Select a date'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              {Platform.OS !== 'web' && (
+                <DateTimePickerModal
+                  isVisible={showRescheduleDatePicker}
+                  mode="date"
+                  date={rescheduleData.date ? parseLocalDateString(rescheduleData.date) : new Date(Date.now() + 24 * 60 * 60 * 1000)}
+                  minimumDate={new Date(Date.now() + 24 * 60 * 60 * 1000)}
+                  onConfirm={handleRescheduleDateConfirm}
+                  onCancel={() => setShowRescheduleDatePicker(false)}
+                />
+              )}
               {rescheduleErrors.date ? <Text style={styles.errorMessage}>{rescheduleErrors.date}</Text> : null}
 
               <Text style={[styles.label, { marginTop: 8 }]}>New Time *</Text>
@@ -1182,20 +1257,31 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
         </View>
       </Modal>
 
-      {/* Cancel Info Modal */}
+      {/* Cancel Confirmation Modal */}
       <Modal visible={showCancelConfirm} transparent animationType="fade" onRequestClose={() => setShowCancelConfirm(false)}>
         <View style={styles.modalOverlayCentered}>
           <View style={styles.branchModalCard}>
             <Text style={styles.branchModalTitle}>Appointment Cancellation</Text>
-            <Text style={{ color: '#6B5D4F', textAlign: 'center', marginBottom: 16, fontSize: 14, lineHeight: 22 }}>
-              Appointments cannot be cancelled directly in this app.{"\n\n"}
-              Please contact the boutique or your branch directly to request a cancellation.{"\n\n"}
-              Your appointment remains active until the cancellation is processed through the proper staff/admin workflow.{"\n\n"}
-              📞 +63 912 345 6789{"\n"}
-              📧 hello@hannahvanessa.com
+            <Text style={{ color: '#6B5D4F', marginBottom: 8, fontSize: 14 }}>
+              Please tell us why you need to cancel this appointment.
             </Text>
-            <TouchableOpacity style={styles.confirmBtn} onPress={() => setShowCancelConfirm(false)}>
-              <Text style={styles.confirmBtnText}>Contact Us</Text>
+            <TextInput
+              style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+              placeholder="Cancellation reason"
+              value={cancellationReason}
+              onChangeText={setCancellationReason}
+              multiline
+            />
+            {cancellationError ? <Text style={styles.errorMessage}>{cancellationError}</Text> : null}
+            <TouchableOpacity
+              style={[styles.confirmBtn, cancellingAppointment && { opacity: 0.6 }]}
+              onPress={handleCancelAppointment}
+              disabled={cancellingAppointment}
+            >
+              {cancellingAppointment ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.confirmBtnText}>Confirm Cancellation</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.branchCancel} onPress={() => setShowCancelConfirm(false)}>
+              <Text style={{ color: '#6B5D4F' }}>Keep Appointment</Text>
             </TouchableOpacity>
           </View>
         </View>

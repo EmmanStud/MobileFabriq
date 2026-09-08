@@ -295,6 +295,22 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
     }, [])
   );
 
+  useEffect(() => {
+    const requestedRental = route?.params?.selectedRental;
+    const requestedRentalId = route?.params?.selectedRentalId;
+    if (!requestedRental && !requestedRentalId) return;
+
+    setActiveTab('existing');
+    const requestedId = String(requestedRentalId || requestedRental?.id || requestedRental?._id || '');
+    const matchingRental = userRentals.find(rental =>
+      String(rental.id || rental._id || '') === requestedId
+    );
+    const rentalToOpen = matchingRental || requestedRental;
+    if (rentalToOpen) {
+      handleOpenRental(rentalToOpen);
+    }
+  }, [route?.params?.selectedRental, route?.params?.selectedRentalId, userRentals]);
+
   // --- API calls ---
   const fetchUserRentals = async (token) => {
     setRentalsLoading(true);

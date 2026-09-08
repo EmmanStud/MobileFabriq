@@ -664,6 +664,28 @@ export const mongodbService = {
     }
   },
 
+  async cancelAppointment(appointmentId, reason, token) {
+    try {
+      if (!MONGODB_API_URL || !token) return { success: false, error: 'Not authenticated' };
+      const url = this._buildUrl(`/appointments/${appointmentId}/status`);
+      const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: 'cancelled', reason }),
+      });
+      const status = response.status;
+      let body = null;
+      try { body = await response.json(); } catch { body = null; }
+      if (response.ok) return { success: true, appointment: body?.appointment || body || null, status, body };
+      return { success: false, error: body?.message || body?.error || 'Failed to cancel appointment', status, body };
+    } catch (err) {
+      return { success: false, error: err.message || 'Connection failed', status: null };
+    }
+  },
+
   // Schedule consultation for a custom order
   async scheduleConsultation(orderId, body, token) {
     try {
@@ -680,8 +702,8 @@ export const mongodbService = {
       const status = response.status;
       let data = null;
       try { data = await response.json(); } catch { data = null; }
-      if (response.ok) return { success: true, order: data?.order || data || null, status };
-      return { success: false, error: data?.message || data?.error || 'Failed to schedule consultation', status };
+      if (response.ok) return { success: true, order: data?.order || data || null, status, body: data };
+      return { success: false, error: data?.message || data?.error || 'Failed to schedule consultation', status, body: data };
     } catch (err) {
       return { success: false, error: err.message || 'Connection failed', status: null };
     }

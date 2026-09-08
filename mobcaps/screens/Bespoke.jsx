@@ -161,6 +161,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [showEventDatePicker, setShowEventDatePicker] = useState(false);
   const [webCalendarState, setWebCalendarState] = useState({ active: null, display: null });
   const [currentUser, setCurrentUser] = useState(null);
@@ -1017,6 +1018,8 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
+
     // Phone verification gate — same pattern as Rentals 
     if (!phoneVerified) { 
       showAlert( 
@@ -1068,6 +1071,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
     }
 
     setValidationErrors({});
+    setIsSubmitting(true);
 
     // Create order object from form data for DB
     const newOrder = {
@@ -1089,6 +1093,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
 
       if (!token) {
         showAlert('Session Expired', 'Please log in again.');
+        setIsSubmitting(false);
         return;
       }
 
@@ -1103,6 +1108,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         const uploadBody = await uploadResponse.json().catch(() => null);
         if (!uploadResponse.ok || !uploadBody?.url) {
           showAlert('Upload Failed', uploadBody?.message || 'Failed to upload design reference image.');
+          setIsSubmitting(false);
           return;
         }
         newOrder.designImageUrl = uploadBody.url;
@@ -1125,11 +1131,13 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         } else {
           showAlert('Error', res.error || 'Failed to submit order. Please try again.');
         }
+        setIsSubmitting(false);
         return;
       }
     } catch (err) {
       console.error('Error creating custom order:', err);
       showAlert('Error', 'Failed to submit order. Please check your connection.');
+      setIsSubmitting(false);
       return;
     }
 
@@ -1149,6 +1157,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       designImageUrl: '',
     });
     setDesign3DData(null);
+    setIsSubmitting(false);
 
     // Show success modal and switch to My Orders tab
     setShowSuccessModal(true);
@@ -1219,6 +1228,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   const [showConsultationModal, setShowConsultationModal] = useState(false);
   const [consultationOrderId, setConsultationOrderId] = useState(null);
   const [consultationDate, setConsultationDate] = useState('');
+  const [showConsultationDatePicker, setShowConsultationDatePicker] = useState(false);
   const [consultationTime, setConsultationTime] = useState('');
   const [consultationReason, setConsultationReason] = useState('');
   const [schedulingConsultation, setSchedulingConsultation] = useState(false);
@@ -1233,14 +1243,23 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   const [fittingError, setFittingError] = useState('');
 
   useEffect(() => {
+    if (route?.params?.activeTab) setActiveTab(route.params.activeTab);
+  }, [route?.params?.activeTab]);
+
+  useEffect(() => {
     const anyActivityOpen =
       menuVisible || showSuccessModal || showEventDatePicker ||
       showColorDropdown || showFabricDropdown || showAIModal || cameraVisible ||
       show3DViewer || showConsultationModal || showFittingModal ||
-      webCalendarState.active !== null;
+      webCalendarState.active !== null || showConsultationDatePicker;
     setChatHidden(anyActivityOpen);
     return () => setChatHidden(false);
-  }, [menuVisible, showSuccessModal, showEventDatePicker, showColorDropdown, showFabricDropdown, showAIModal, cameraVisible, show3DViewer, showConsultationModal, showFittingModal, webCalendarState, setChatHidden]);
+  }, [menuVisible, showSuccessModal, showEventDatePicker, showColorDropdown, showFabricDropdown, showAIModal, cameraVisible, show3DViewer, showConsultationModal, showFittingModal, webCalendarState, showConsultationDatePicker, setChatHidden]);
+
+  const handleConsultationDateConfirm = (date) => {
+    setConsultationDate(getLocalDateString(date));
+    setShowConsultationDatePicker(false);
+  };
 
   const handleScheduleConsultation = async () => {
     if (!consultationDate || !consultationTime) {
@@ -1254,10 +1273,32 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       const token = session?.token || authToken;
       const body = { consultationDate, consultationTime };
       if (consultationReason) body.consultationRescheduleReason = consultationReason;
+      const selectedOrder = userOrders.find(order => (order.id || order._id) === consultationOrderId);
+      const endpoint = `/custom-orders/${consultationOrderId}/consultation-schedule`;
+      console.log('[BESPOKE CONSULTATION DEBUG]', {
+        orderId: consultationOrderId,
+        customerId: currentUser?.id || currentUser?._id || currentUser?.customerId || null,
+        customerEmail: userEmail || currentUser?.email || null,
+        consultationDate,
+        consultationTime,
+        branch: selectedOrder?.branch || null,
+        endpoint,
+        hasAuthenticationToken: Boolean(token),
+        requestBody: body,
+      });
       const res = await mongodbService.scheduleConsultation(consultationOrderId, body, token);
+      console.log('[BESPOKE CONSULTATION DEBUG]', {
+        responseStatus: res.status,
+        responseBody: res.body || null,
+        error: res.success ? null : res.error,
+        errorType: res.status === null ? 'network' : (res.success ? null : 'api'),
+      });
       if (res.success) {
         setShowConsultationModal(false);
-        fetchUserOrders(userEmail);
+        setConsultationDate('');
+        setConsultationTime('');
+        setConsultationReason('');
+        await fetchUserOrders(userEmail);
         showAlert('Success', 'Consultation scheduled successfully!');
       } else {
         setConsultationError(res.error || 'Failed to schedule consultation.');
@@ -1867,13 +1908,19 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
                   <TouchableOpacity
                     style={[
                       styles.submitGoldBtn,
-                      !isFormValid() && styles.submitGoldBtnDisabled,
+                      (!isFormValid() || isSubmitting) && styles.submitGoldBtnDisabled,
                     ]}
                     onPress={handleSubmit}
-                    disabled={!isFormValid()}
+                    disabled={!isFormValid() || isSubmitting}
                   >
-                    <Text style={styles.submitGoldBtnText}>Submit Order Inquiry</Text>
-                    <ChevronRight color="#fff" size={18} />
+                    {isSubmitting ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Text style={styles.submitGoldBtnText}>Submit Order Inquiry</Text>
+                        <ChevronRight color="#fff" size={18} />
+                      </>
+                    )}
                   </TouchableOpacity>
                 </View>
               </>
@@ -2251,13 +2298,27 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
               <Text style={styles.scheduleModalSub}>Pick a date at least 1 day from today and a time between 08:00 - 17:00</Text>
 
               <Text style={styles.scheduleLabel}>Consultation Date *</Text>
-              <TextInput
+              <TouchableOpacity
                 style={styles.scheduleInput}
-                placeholder="YYYY-MM-DD"
-                value={consultationDate}
-                onChangeText={setConsultationDate}
-                keyboardType="numbers-and-punctuation"
-              />
+                onPress={() => setShowConsultationDatePicker(true)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Calendar size={18} color="#6B5D4F" />
+                  <Text style={{ color: consultationDate ? '#1a1a1a' : '#9CA3AF' }}>
+                    {consultationDate || 'Select a date'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              {Platform.OS !== 'web' && (
+                <DateTimePickerModal
+                  isVisible={showConsultationDatePicker}
+                  mode="date"
+                  date={consultationDate ? parseLocalDateString(consultationDate) : new Date(Date.now() + 24 * 60 * 60 * 1000)}
+                  minimumDate={new Date(Date.now() + 24 * 60 * 60 * 1000)}
+                  onConfirm={handleConsultationDateConfirm}
+                  onCancel={() => setShowConsultationDatePicker(false)}
+                />
+              )}
 
               <Text style={styles.scheduleLabel}>Consultation Time *</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>

@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import * as WebBrowser from 'expo-web-browser';
 import { API_URL } from '../services/apiConfig';
 
 const PENDING_PAYMONGO_KEY = 'mobcaps_pending_paymongo_payment';
@@ -18,6 +19,7 @@ export default function RentalDetailsModal({ visible, rental, onClose, onReceipt
   const [error, setError] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false);
 
   // Schedule Pickup state
   const [showPickupSchedule, setShowPickupSchedule] = useState(false);
@@ -60,6 +62,8 @@ export default function RentalDetailsModal({ visible, rental, onClose, onReceipt
   };
 
   const handlePaymongoCheckout = async () => {
+    setError('');
+    setProcessingPayment(true);
     try {
       const rentalId = rental.id || rental._id;
       const response = await fetch(`${API_URL}/rentals/${rentalId}/paymongo-link`, {
@@ -80,17 +84,14 @@ export default function RentalDetailsModal({ visible, rental, onClose, onReceipt
         paymentLinkId: data.paymentLinkId,
       }));
 
-      const canOpen = await Linking.canOpenURL(data.paymentLinkUrl);
-      if (!canOpen) {
-        throw new Error('This device cannot open the PayMongo checkout page.');
-      }
-
-      await Linking.openURL(data.paymentLinkUrl);
+      await WebBrowser.openBrowserAsync(data.paymentLinkUrl);
       setShowConfirm(false);
       setShowPayment(false);
       setError('');
     } catch (err) {
       setError(err.message || 'Unable to open PayMongo checkout.');
+    } finally {
+      setProcessingPayment(false);
     }
   };
 
@@ -346,18 +347,25 @@ export default function RentalDetailsModal({ visible, rental, onClose, onReceipt
                 <Text style={styles.value}>₱{Math.max(0, (rental.totalPrice || 0) - (rental.downpayment || 0)).toLocaleString()}</Text>
               </View>
             </View>
+            {error ? <Text style={[styles.error, { marginTop: 12 }]}>{error}</Text> : null}
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
               <TouchableOpacity
                 style={[styles.closeBtn, { flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E8DCC8' }]}
                 onPress={() => setShowConfirm(false)}
+                disabled={processingPayment}
               >
                 <Text style={[styles.closeBtnText, { color: '#1a1a1a' }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.payNowBtn, { flex: 1, backgroundColor: '#1a1a1a' }]}
                 onPress={handlePaymongoCheckout}
+                disabled={processingPayment}
               >
-                <Text style={[styles.payNowBtnText, { color: '#fff' }]}>Yes, Proceed</Text>
+                {processingPayment ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[styles.payNowBtnText, { color: '#fff' }]}>Yes, Proceed</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>

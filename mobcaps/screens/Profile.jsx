@@ -381,6 +381,8 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
             date: r.startDate || r.createdAt || '', 
             status: r.status === 'item_lost' ? 'Item Lost' : r.status.charAt(0).toUpperCase() + r.status.slice(1), 
             branch: r.branch || '', 
+            recordId: r.id || r._id,
+            record: r,
           })), 
         ...appointments 
           .filter(a => a.status === 'completed' || a.status === 'cancelled') 
@@ -391,6 +393,8 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
             date: a.date || a.createdAt || '', 
             status: a.status.charAt(0).toUpperCase() + a.status.slice(1), 
             branch: a.branch || '', 
+            recordId: a.id || a._id,
+            record: a,
           })), 
         ...orders 
           .filter(o => o.status === 'completed' || o.status === 'rejected') 
@@ -401,6 +405,8 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
             date: o.eventDate || o.createdAt || '', 
             status: o.status === 'rejected' ? 'Rejected' : 'Completed', 
             branch: o.branch || '', 
+            recordId: o.id || o._id,
+            record: o,
           })), 
       ].sort((a, b) => new Date(b.date) - new Date(a.date)); 
   
@@ -1046,7 +1052,23 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
                 </View> 
               ) : ( 
                 history.map((item, index) => ( 
-                  <View key={`${item.id}-${index}`} style={styles.historyItem}> 
+                  <TouchableOpacity
+                    key={`${item.id}-${index}`}
+                    style={styles.historyItem}
+                    activeOpacity={0.75}
+                    onPress={() => {
+                      if (item.type === 'Rental') {
+                        navigation.navigate('Rentals', {
+                          selectedRentalId: item.recordId,
+                          selectedRental: item.record,
+                        });
+                      } else if (item.type === 'Appointment') {
+                        navigation.navigate('Appointments', { activeTab: 'history', selectedAppointmentId: item.recordId });
+                      } else {
+                        navigation.navigate('Bespoke', { activeTab: 'history', selectedOrderId: item.recordId });
+                      }
+                    }}
+                  >
                     <View style={styles.historyInfo}> 
                       <View style={styles.historyTags}> 
                         <View style={styles.typeTag}> 
@@ -1075,7 +1097,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
                         {item.status} 
                       </Text> 
                     </View> 
-                  </View> 
+                  </TouchableOpacity>
                 )) 
               )} 
             </View> 
