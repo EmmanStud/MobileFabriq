@@ -40,30 +40,50 @@ const heroCollections = [
   {
     id: 1,
     title: 'Bridal',
+    category: 'Wedding Dress',
     subtitle: 'Eternal Elegance',
-    image: Home1Image,
+    image: { uri: 'https://images.unsplash.com/photo-1767050400384-3e2c733e5dba?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080' },
     description: 'Timeless wedding gowns for your special day'
   },
   {
     id: 2,
     title: 'Evening',
+    category: 'Evening Gown',
     subtitle: 'Sophisticated Grace',
-    image: Home2Image,
+    image: { uri: 'https://images.unsplash.com/photo-1764998112680-2f617dc9be40?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080' },
     description: 'Elegant evening wear for formal occasions'
   },
   {
     id: 3,
     title: 'Ball Gown',
+    category: 'Ball Gown',
     subtitle: 'Royal Grandeur',
-    image: Home1Image,
+    image: { uri: 'https://images.unsplash.com/photo-1647791770645-509119fe2b8a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080' },
     description: 'Dramatic silhouettes for grand celebrations'
   },
   {
     id: 4,
     title: 'Cocktail',
+    category: 'Cocktail Dress',
     subtitle: 'Modern Charm',
-    image: Home2Image,
+    image: { uri: 'https://images.unsplash.com/photo-1735712954543-67a25a6998c8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080' },
     description: 'Chic designs for cocktail parties'
+  },
+  {
+    id: 5,
+    title: 'Debut',
+    category: 'Ball Gown',
+    subtitle: 'Coming of Age',
+    image: { uri: 'https://images.unsplash.com/photo-1761164920960-2d776a18998c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080' },
+    description: 'Perfect gowns for your 18th birthday'
+  },
+  {
+    id: 6,
+    title: 'Couture',
+    category: 'Evening Gown',
+    subtitle: 'Haute Luxury',
+    image: { uri: 'https://images.unsplash.com/photo-1765229280659-d35a2467b976?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080' },
+    description: 'Exclusive designer pieces'
   }
 ];
 
@@ -74,21 +94,42 @@ const topGowns = [
     name: 'Celestial Dream',
     category: 'Bridal Collection',
     price: '₱8,000',
-    image: Home1Image
+    image: { uri: 'https://images.unsplash.com/photo-1767050400384-3e2c733e5dba?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080' }
   },
   {
     id: 2,
     name: 'Midnight Noir',
     category: 'Evening Gown',
     price: '₱5,500',
-    image: Home2Image
+    image: { uri: 'https://images.unsplash.com/photo-1764998112680-2f617dc9be40?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080' }
   },
   {
     id: 3,
     name: 'Rose Couture',
     category: 'Ball Gown',
     price: '₱6,200',
-    image: Home1Image
+    image: { uri: 'https://images.unsplash.com/photo-1647791770645-509119fe2b8a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080' }
+  },
+  {
+    id: 4,
+    name: 'Golden Hour',
+    category: 'Cocktail Dress',
+    price: '₱3,800',
+    image: { uri: 'https://images.unsplash.com/photo-1735712954543-67a25a6998c8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080' }
+  },
+  {
+    id: 5,
+    name: 'Ivory Perfection',
+    category: 'Wedding Dress',
+    price: '₱7,500',
+    image: { uri: 'https://images.unsplash.com/photo-1761164920960-2d776a18998c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080' }
+  },
+  {
+    id: 6,
+    name: 'Silk Symphony',
+    category: 'Evening Gown',
+    price: '₱4,800',
+    image: { uri: 'https://images.unsplash.com/photo-1765229280659-d35a2467b976?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080' }
   }
 ];
 
@@ -322,10 +363,10 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
     initializeBranding();
   }, []);
 
-  // Hero carousel auto-rotation
+  // Hero carousel auto-rotation (advances by pairs, like the web version)
   useEffect(() => {
     const heroInterval = setInterval(() => {
-      setHeroSlide((prev) => (prev + 1) % heroCollections.length);
+      setHeroSlide((prev) => (prev + 2) % heroCollections.length);
     }, 6000);
     return () => clearInterval(heroInterval);
   }, []);
@@ -1014,51 +1055,97 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
 
       <ScrollView showsVerticalScrollIndicator={false}>
         
-        {/* SECTION 1: HERO */}
-        <View style={styles.section}>
-          <Text style={[styles.tagline, { fontSize: moderateScale(10) }]}>ELEGANT  •  BESPOKE  •  TIMELESS</Text>
-          <Text style={[styles.mainTitle, { fontSize: moderateScale(44), lineHeight: moderateScale(50) }]}> 
-            Where Craftsmanship Meets Dreams
+        {/* SECTION 1: HERO CAROUSEL (split image pairs, matches web) */}
+        <View style={styles.heroCarouselWrap}>
+          {[0, 1].map((offset) => {
+            const collection = heroCollections[(heroSlide + offset) % heroCollections.length];
+            return (
+              <TouchableOpacity
+                key={`${collection.id}-${offset}`}
+                activeOpacity={0.9}
+                style={styles.heroCard}
+                onPress={() => navigation.navigate('Collection', { category: collection.category })}
+              >
+                <Image source={collection.image} style={styles.heroCardImage} />
+                <View style={styles.heroCardOverlay} />
+                <View style={styles.heroCardContent}>
+                  <Text style={styles.heroCardSubtitle}>{collection.subtitle}</Text>
+                  <Text style={styles.heroCardTitle}>{collection.title}</Text>
+                  <Text style={styles.heroCardDescription}>{collection.description}</Text>
+                  <View style={styles.heroCardExploreRow}>
+                    <Text style={styles.heroCardExploreText}>EXPLORE</Text>
+                    <ArrowRight color="#fff" size={16} />
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+
+          <View style={styles.heroDotsRow}>
+            {[...Array(Math.ceil(heroCollections.length / 2))].map((_, index) => (
+              <TouchableOpacity
+                key={index}
+                onPress={() => setHeroSlide(index * 2)}
+                style={[
+                  styles.heroDot,
+                  Math.floor(heroSlide / 2) === index ? styles.heroDotActive : styles.heroDotInactive,
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+
+        {/* SECTION 1.5: FEATURED GOWNS */}
+        <View style={[styles.section, styles.whiteBg]}>
+          <Text style={styles.tagline}>THIS SEASON'S BEST</Text>
+          <Text style={[styles.sectionTitle, { fontSize: moderateScale(32) }]}>Featured Gowns</Text>
+
+          {topGowns.map((gown) => (
+            <TouchableOpacity
+              key={gown.id}
+              style={styles.featuredCard}
+              activeOpacity={0.9}
+              onPress={() => navigation.navigate('Collection', { category: gown.category })}
+            >
+              <Image source={gown.image} style={styles.featuredCardImage} />
+              <Text style={styles.featuredCardCategory}>{gown.category}</Text>
+              <Text style={styles.featuredCardName}>{gown.name}</Text>
+              <Text style={styles.featuredCardPrice}>{gown.price} / day</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* SECTION 2: OUR STORY */}
+        <View style={[styles.section, styles.whiteBg]}>
+          <Text style={styles.tagline}>ESTABLISHED 1993</Text>
+          <Text style={[styles.sectionTitle, { fontSize: moderateScale(32) }]}>
+            Where Every Stitch{ '\n' }Tells <Text style={{ fontStyle: 'italic' }}>a Story</Text>
           </Text>
-          <Text style={[styles.description, { fontSize: moderateScale(15) }]}> 
-            Experience the art of bespoke tailoring at Hannah Vanessa Boutique. 
-            From exquisite gown rentals to custom creations, we bring your vision to life.
+          <Text style={styles.description}>
+            For over three decades, Hannah Vanessa Boutique has been the trusted name in elegant formal wear across the Philippines. From timeless bridal gowns to stunning evening wear, we curate each piece with exceptional care.
           </Text>
           <TouchableOpacity style={styles.blackBtn} onPress={() => navigation.navigate('Collection')}>
-            <Text style={styles.blackBtnText}>Explore Collection</Text>
+            <Text style={styles.blackBtnText}>Discover More</Text>
             <ArrowRight color="#fff" size={18} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.outlineBtn} onPress={() => handleAuthAction('Bespoke')}>
-            <Text style={styles.outlineBtnText}>Start Custom Order</Text>
-          </TouchableOpacity>
-          <View style={styles.imageWrapper}>
-            <Image source={Home1Image} style={styles.heroImage} />
-            <View style={styles.clientBadge}>
-              <Text style={styles.badgeSub}>Trusted by clients since 1993</Text>
-              <Text style={styles.badgeMain}>5000+ Happy Clients</Text>
+
+          <View style={styles.storyCollage}>
+            <View style={styles.storyCol}>
+              <Image source={Home1Image} style={styles.storyImgTall} />
+              <Image source={Home2Image} style={styles.storyImgSquare} />
+            </View>
+            <View style={[styles.storyCol, styles.storyColOffset]}>
+              <Image source={Home1Image} style={styles.storyImgSquare} />
+              <Image source={Home2Image} style={styles.storyImgTall} />
             </View>
           </View>
         </View>
 
-        {/* SECTION 2: THE COLLECTION */}
-        <View style={[styles.section, styles.whiteBg]}>
-          <Text style={styles.tagline}>THE COLLECTION</Text>
-          <Text style={[styles.sectionTitle, { fontSize: moderateScale(32) }]}>Curated Excellence</Text>
-          <Text style={styles.description}>
-            Our collection features handpicked gowns from renowned designers, each piece selected for its exceptional craftsmanship.
-          </Text>
-          <TouchableOpacity style={styles.textLinkBtn} onPress={() => navigation.navigate('Collection')}>
-            <Text style={styles.textLink}>VIEW ALL GOWNS</Text>
-            <ArrowRight color="#1a1a1a" size={16} />
-          </TouchableOpacity>
-          <Image source={Home2Image} style={styles.collectionImage} />
-        </View>
-
         {/* SECTION 3: OUR SERVICES */}
         <View style={styles.servicesSection}>
-          <Text style={[styles.servicesHeader, { fontSize: moderateScale(32) }]}>Our Services</Text>
+          <Text style={[styles.servicesHeader, { fontSize: moderateScale(32) }]}>Exceptional Services</Text>
           <Text style={styles.servicesSub}>
-            From ready-to-wear collections to fully customized pieces, we provide a seamless experience.
+            Every detail thoughtfully crafted for your perfect experience.
           </Text>
 
           <ServiceCard icon={Sparkles} title="Browse Catalog" target="Collection" isProtected={false} description="Explore our curated collection of elegant gowns." />
@@ -1072,7 +1159,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
           <View style={styles.statsGrid}>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>500+</Text>
-              <Text style={styles.statLabel}>GOWNS AVAILABLE</Text>
+              <Text style={styles.statLabel}>GOWNS</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>1,200+</Text>
@@ -1085,17 +1172,22 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
               <Text style={styles.statLabel}>BRANCHES</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>15+</Text>
-              <Text style={styles.statLabel}>YEARS EXPERIENCE</Text>
+              <Text style={styles.statNumber}>30+</Text>
+              <Text style={styles.statLabel}>YEARS</Text>
             </View>
           </View>
         </View>
 
         {/* SECTION 5: FINAL CTA */}
         <View style={styles.ctaSection}>
-          <Text style={styles.ctaTitle}>Begin Your Journey{"\n"}With Us</Text>
-          <TouchableOpacity style={styles.blackBtn} onPress={() => handleAuthAction('Appointments')}>
-            <Text style={styles.blackBtnText}>Schedule Consultation</Text>
+          <Text style={styles.ctaTitle}>
+            Ready to Find{'\n'}<Text style={{ fontStyle: 'italic' }}>Your Perfect</Text> Gown?
+          </Text>
+          <Text style={styles.ctaSubtext}>
+            Start your journey with us. Book a consultation or explore our collections today.
+          </Text>
+          <TouchableOpacity style={styles.goldBtn} onPress={() => handleAuthAction('Appointments')}>
+            <Text style={styles.goldBtnText}>Book Consultation</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.outlineBtn} onPress={() => navigation.navigate('Collection')}>
             <Text style={styles.outlineBtnText}>View Collections</Text>
@@ -1922,7 +2014,33 @@ const styles = StyleSheet.create({
   textLink: { fontSize: 12, fontWeight: 'bold', borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
   imageWrapper: { marginTop: 40, position: 'relative' },
   heroImage: { width: '100%', aspectRatio: 0.72 },
+  // Hero carousel (split image pairs)
+  heroCarouselWrap: { backgroundColor: '#000' },
+  heroCard: { width: '100%', aspectRatio: 1.15, position: 'relative', justifyContent: 'flex-end' },
+  heroCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  heroCardOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.42)' },
+  heroCardContent: { padding: 24, paddingBottom: 32 },
+  heroCardSubtitle: { color: 'rgba(255,255,255,0.9)', fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 6 },
+  heroCardTitle: { color: '#fff', fontFamily: 'serif', fontWeight: '300', fontSize: 40, marginBottom: 10 },
+  heroCardDescription: { color: 'rgba(255,255,255,0.95)', fontSize: 13, maxWidth: '80%', marginBottom: 14 },
+  heroCardExploreRow: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', borderBottomWidth: 1.5, borderBottomColor: '#fff', paddingBottom: 4 },
+  heroCardExploreText: { color: '#fff', fontSize: 12, letterSpacing: 2 },
+  heroDotsRow: { position: 'absolute', bottom: 16, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  heroDot: { height: 3, borderRadius: 2 },
+  heroDotActive: { width: 28, backgroundColor: '#fff' },
+  heroDotInactive: { width: 20, backgroundColor: 'rgba(255,255,255,0.4)' },
+  // Featured gowns
+  featuredCard: { marginBottom: 28 },
+  featuredCardImage: { width: '100%', aspectRatio: 0.75, backgroundColor: '#F5F1E8', marginBottom: 12 },
+  featuredCardCategory: { fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: '#6B5D4F', marginBottom: 4 },
+  featuredCardName: { fontSize: 20, fontFamily: 'serif', color: '#1a1a1a', marginBottom: 4 },
+  featuredCardPrice: { fontSize: 13, color: '#6B5D4F' },
   collectionImage: { width: '100%', aspectRatio: 0.9, marginTop: 20 },
+  storyCollage: { flexDirection: 'row', gap: 12, marginTop: 30 },
+  storyCol: { flex: 1, gap: 12 },
+  storyColOffset: { marginTop: 30 },
+  storyImgTall: { width: '100%', aspectRatio: 0.75 },
+  storyImgSquare: { width: '100%', aspectRatio: 1 },
   clientBadge: { position: 'absolute', bottom: -10, left: -10, maxWidth: '75%', backgroundColor: '#FFF', padding: 20, elevation: 5 },
   badgeSub: { fontSize: 10, color: '#6B5D4F' },
   badgeMain: { fontSize: 18, fontFamily: 'serif', marginTop: 5 },
@@ -1951,6 +2069,9 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 10, color: '#A0A0A0', letterSpacing: 2, textAlign: 'center' },
   ctaSection: { backgroundColor: '#FAF7F0', paddingVertical: 80, paddingHorizontal: 30, alignItems: 'center' },
   ctaTitle: { fontSize: 34, fontFamily: 'serif', textAlign: 'center', color: '#1a1a1a', lineHeight: 42, marginBottom: 20 },
+  ctaSubtext: { fontSize: 15, color: '#6B5D4F', textAlign: 'center', lineHeight: 22, marginBottom: 25 },
+  goldBtn: { backgroundColor: '#D4AF37', padding: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 10, width: '100%' },
+  goldBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 footerContainer: {
   backgroundColor: '#6B5D4F',
   padding: 20,
