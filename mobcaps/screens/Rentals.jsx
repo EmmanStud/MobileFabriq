@@ -28,13 +28,6 @@ import CustomAlertModal from '../components/CustomAlertModal';
 
 import RentalDetailsModal from '../components/RentalDetailsModal';
 
-const branchOptions = [
-  'Taguig Main - Cadena de Amor',
-  'BGC Branch',
-  'Makati Branch',
-  'Quezon City',
-];
-
 const PENDING_PAYMONGO_KEY = 'mobcaps_pending_paymongo_payment';
 
 export default function Rentals({ navigation, route, unreadCount = 0 }) {
@@ -273,6 +266,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
     if (route?.params?.selectedGown) {
       const gown = route.params.selectedGown;
       setSelectedGown(gown);
+      setFormData(prev => ({ ...prev, branch: typeof gown.branch === 'string' ? gown.branch.trim() : '' }));
       setActiveTab('new');
       console.log('📦 Gown received from Collection:', gown.name, '₱' + gown.price);
     } else {
@@ -280,10 +274,14 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
       setActiveTab('existing');
     }
 
-    if (route?.params?.selectedBranch) {
-      setFormData(prev => ({ ...prev, branch: route.params.selectedBranch }));
-    }
   }, [route]);
+
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      branch: typeof selectedGown?.branch === 'string' ? selectedGown.branch.trim() : '',
+    }));
+  }, [selectedGown]);
 
   // Refresh rentals when screen comes into focus
   useFocusEffect(
@@ -460,10 +458,10 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
   const calculateDownpayment = () => Math.floor(calculateTotalPrice() / 2);
 
   // --- Validation ---
-  const isMissingPickupBranch = (branchValue) => {
-    if (branchValue === null || branchValue === undefined) return true;
-    if (typeof branchValue === 'string' && branchValue.trim() === '') return true;
-    return !branchOptions.includes(branchValue);
+  const isMissingPickupBranch = (branchValue, expectedBranch = selectedGown?.branch) => {
+    const actual = typeof branchValue === 'string' ? branchValue.trim() : '';
+    const expected = typeof expectedBranch === 'string' ? expectedBranch.trim() : '';
+    return !actual || !expected || actual !== expected;
   };
 
   const isRentalDateRangeValid = (startDateString, endDateString, datesUnavailable = []) => {
@@ -528,7 +526,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
       }
 
       if (isMissingPickupBranch(formData.branch)) {
-        errors.branch = 'Please select a pickup branch.';
+        errors.branch = 'Unable to determine the gown\'s pickup branch. Please try selecting the gown again.';
       }
     }
     if (step === 3 && !personalInfo.contactNumber.trim()) {
@@ -563,12 +561,12 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
       }
 
       if (isMissingPickupBranch(formData.branch)) {
-        nextError.branch = 'Please select a pickup branch.';
+        nextError.branch = 'Unable to determine the gown\'s pickup branch. Please try selecting the gown again.';
       }
 
       setValidationErrors(nextError);
       if (nextError.branch) {
-        showRentalAlert('Pickup Branch Required', 'Please select a pickup branch.');
+        showRentalAlert('Pickup Branch Unavailable', nextError.branch);
       } else if (nextError.endDate || nextError.startDate) {
         showRentalAlert('Rental Details Invalid', nextError.endDate || nextError.startDate);
       }
@@ -1073,22 +1071,17 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
 
                     {/* Branch */}
                     <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Pickup Branch *</Text>
-                      <View style={styles.selectContainer}>
-                        <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false} style={styles.branchList}>
-                          {branchOptions.map((branch, idx) => (
-                            <TouchableOpacity
-                              key={idx}
-                              style={[styles.branchOption, formData.branch === branch && styles.branchOptionSelected]}
-                              onPress={() => setFormData(prev => ({ ...prev, branch }))}
-                            >
-                              <Text style={[styles.branchOptionText, formData.branch === branch && styles.branchOptionTextSelected]}>
-                                {branch}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
+                      <Text style={styles.label}>Pickup Location *</Text>
+                      <View style={[styles.input, styles.readOnlyInput]}>
+                        <Text style={{ color: formData.branch ? '#6B5D4F' : '#B91C1C' }}>
+                          {formData.branch || 'Branch unavailable for this gown'}
+                        </Text>
                       </View>
+                      <Text style={styles.branchHelpText}>
+                        {formData.branch
+                          ? 'Determined by the selected gown\'s inventory location.'
+                          : 'Please try selecting the gown again or contact the boutique.'}
+                      </Text>
                       {validationErrors.branch && <Text style={styles.errorMessage}>{validationErrors.branch}</Text>}
                     </View>
                   </View>
@@ -1618,6 +1611,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, color: '#6B5D4F', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   input: { borderWidth: 1, borderColor: '#E8DCC8', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: 14, color: '#1a1a1a', backgroundColor: '#fff' },
   readOnlyInput: { backgroundColor: '#f8f5ef', color: '#6B5D4F' },
+  branchHelpText: { color: '#6B5D4F', fontSize: 12, marginTop: 6 },
   inputError: { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
   inputDisabled: { opacity: 0.5, backgroundColor: '#f5f5f5', borderColor: '#ccc' },
   errorMessage: { fontSize: 11, color: '#dc2626', marginTop: 4, fontWeight: '500' },

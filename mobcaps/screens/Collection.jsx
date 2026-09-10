@@ -128,7 +128,7 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
             size: Array.isArray(item.size) ? item.size : (item.size ? [item.size] : ['M']),
             price: item.price || 0,
             status,
-            branch: item.branch || 'Main Branch',
+            branch: typeof item.branch === 'string' ? item.branch.trim() : '',
             image: imageSource,
             hasImage: !!imageSource,
             model3dUrl,
@@ -370,8 +370,7 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
                                 const logged = await sessionService.isLoggedIn();
                                 if (logged) { 
                                   navigation.navigate('Rentals', { 
-                                    selectedGown: item,
-                                    selectedBranch: item.branch
+                                                                        selectedGown: item
                                   }); 
                                 } 
                                 else { navigation.navigate('Home', { openAuth: true }); }
@@ -639,8 +638,7 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
                                                         } else {
                                                             setSelectedGown(null);
                                                             navigation.navigate('Rentals', { 
-                                                              selectedGown: selectedGown,
-                                                              selectedBranch: selectedGown.branch
+                                                                                                                            selectedGown: selectedGown
                                                             });
                                                         }
                                                     }}

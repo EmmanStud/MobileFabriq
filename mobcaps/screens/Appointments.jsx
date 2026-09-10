@@ -52,6 +52,7 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
 
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [rescheduleAppointmentId, setRescheduleAppointmentId] = useState(null);
+  const [rescheduleGownId, setRescheduleGownId] = useState('');
   const [rescheduleData, setRescheduleData] = useState({ date: '', time: '', branch: 'Taguig Main', reason: '' });
   const [rescheduleErrors, setRescheduleErrors] = useState({});
   const [rescheduling, setRescheduling] = useState(false);
@@ -81,6 +82,8 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
   }, [menuVisible, showDatePicker, showBranchModal, showTimeModal, showSuccessModal, showRescheduleModal, showCancelConfirm, showGownModal, showRescheduleDatePicker, setChatHidden]);
   const [selectedGownId, setSelectedGownId] = useState('');
   const [selectedGownName, setSelectedGownName] = useState('');
+  const selectedGown = availableGowns.find((gown) => (gown._id || gown.id) === selectedGownId);
+  const selectedGownBranch = typeof selectedGown?.branch === 'string' ? selectedGown.branch.trim() : '';
 
   const appointmentTypes = [
     { value: 'consultation', label: 'Design Consultation', icon: '💭' },
@@ -143,7 +146,15 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
     if (!rescheduleData.date) errors.date = 'Please select a date';
     if (!rescheduleData.time) errors.time = 'Please select a time';
     if (!rescheduleData.reason.trim()) errors.reason = 'A reason is required for rescheduling';
+    const rescheduleGown = availableGowns.find(gown => (gown._id || gown.id) === rescheduleGownId);
+    if (rescheduleGownId && !(typeof rescheduleGown?.branch === 'string' && rescheduleGown.branch.trim())) {
+      errors.branch = 'Unable to determine the gown\'s branch. Please try again.';
+    }
     if (Object.keys(errors).length > 0) { setRescheduleErrors(errors); return; }
+
+    const resolvedRescheduleBranch = rescheduleGownId
+      ? rescheduleGown.branch.trim()
+      : rescheduleData.branch;
 
     setRescheduling(true);
     setRescheduleErrors({});
@@ -152,7 +163,7 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
       const token = session?.token || authToken;
       const res = await mongodbService.rescheduleAppointment(
         rescheduleAppointmentId,
-        rescheduleData,
+        { ...rescheduleData, branch: resolvedRescheduleBranch },
         token
       );
       if (res.success) {
@@ -340,6 +351,17 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
     }
   }, [formData.date, formData.appointmentType, formData.branch]);
 
+  useEffect(() => {
+    if (formData.appointmentType !== 'fitting') return;
+
+    const nextBranch = typeof selectedGown?.branch === 'string' ? selectedGown.branch.trim() : '';
+    setFormData(prev => ({
+      ...prev,
+      branch: nextBranch,
+      time: prev.branch === nextBranch ? prev.time : '',
+    }));
+  }, [formData.appointmentType, selectedGown]);
+
   const fetchAvailability = async (date, appointmentType, branch) => {
     if (!date) return;
     try {
@@ -440,6 +462,10 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
 
     if (formData.appointmentType === 'fitting' && !selectedGownId) {
       newErrors.selectedGown = 'Please select a gown for fitting';
+    }
+
+    if (formData.appointmentType === 'fitting' && !selectedGownBranch) {
+      newErrors.branch = 'Unable to determine the gown\'s branch. Please try selecting the gown again.';
     }
 
     if (!formData.date) {
@@ -748,9 +774,23 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
 
                   <View style={styles.formCol}>
                     <Text style={styles.label}>Branch *</Text>
-                    <TouchableOpacity style={styles.input} onPress={() => setShowBranchModal(true)}>
-                      <Text style={{ color: '#1a1a1a' }}>{formData.branch}</Text>
+                    <TouchableOpacity
+                      style={styles.input}
+                      onPress={() => {
+                        if (formData.appointmentType !== 'fitting') setShowBranchModal(true);
+                      }}
+                      disabled={formData.appointmentType === 'fitting'}
+                    >
+                      <Text style={{ color: formData.branch ? '#1a1a1a' : '#B91C1C' }}>
+                        {formData.branch || 'Branch unavailable for this gown'}
+                      </Text>
                     </TouchableOpacity>
+                    {formData.appointmentType === 'fitting' && selectedGownBranch && (
+                      <Text style={styles.branchHelpText}>Determined by the selected gown's inventory location.</Text>
+                    )}
+                    {formData.appointmentType === 'fitting' && selectedGownId && !selectedGownBranch && (
+                      <Text style={styles.errorMessage}>Please try selecting the gown again.</Text>
+                    )}
                   </View>
 
                   <View style={[styles.formCol, { width: '100%' }]}> 
@@ -838,7 +878,10 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
                         style={styles.actionBtn}
                         onPress={() => {
                           setRescheduleAppointmentId(appointment.id);
-                          setRescheduleData({ date: '', time: '', branch: appointment.branch || 'Taguig Main', reason: '' });
+                          const appointmentGownId = appointment.selectedGown || '';
+                          const appointmentGown = availableGowns.find(gown => (gown._id || gown.id) === appointmentGownId);
+                          setRescheduleGownId(appointmentGownId);
+                          setRescheduleData({ date: '', time: '', branch: appointmentGown?.branch || appointment.branch || 'Taguig Main', reason: '' });
                           setRescheduleOriginal({ date: appointment.date || '', time: appointment.time || '' });
                           setRescheduleErrors({});
                           setRescheduleTakenTimes([]);
@@ -964,7 +1007,14 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
           <View style={styles.branchModalCard}>
             <Text style={styles.branchModalTitle}>Select Branch</Text>
             {branches.map(b => (
-              <TouchableOpacity key={b} style={styles.branchItem} onPress={() => { setFormData(prev => ({ ...prev, branch: b })); setShowBranchModal(false); }}>
+              <TouchableOpacity key={b} style={styles.branchItem} onPress={() => {
+                if (showRescheduleModal) {
+                  setRescheduleData(prev => ({ ...prev, branch: b }));
+                } else {
+                  setFormData(prev => ({ ...prev, branch: b }));
+                }
+                setShowBranchModal(false);
+              }}>
                 <Text style={styles.branchText}>{b}</Text>
               </TouchableOpacity>
             ))}
@@ -1224,10 +1274,18 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
               <Text style={[styles.label, { marginTop: 8 }]}>Branch</Text>
               <TouchableOpacity
                 style={styles.input}
-                onPress={() => setShowBranchModal(true)}
+                onPress={() => {
+                  if (!rescheduleGownId) setShowBranchModal(true);
+                }}
+                disabled={Boolean(rescheduleGownId)}
               >
-                <Text style={{ color: '#1a1a1a' }}>{rescheduleData.branch}</Text>
+                <Text style={{ color: rescheduleData.branch ? '#1a1a1a' : '#B91C1C' }}>
+                  {rescheduleData.branch || 'Branch unavailable for this gown'}
+                </Text>
               </TouchableOpacity>
+              {rescheduleGownId && (
+                <Text style={styles.branchHelpText}>Determined by the selected gown's inventory location.</Text>
+              )}
 
               <Text style={[styles.label, { marginTop: 8 }]}>Reason for Rescheduling *</Text>
               <TextInput
@@ -1308,6 +1366,7 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
                     onPress={() => {
                       setSelectedGownId(gown._id || gown.id);
                       setSelectedGownName(gown.name);
+                      setFormData(prev => ({ ...prev, branch: gown.branch || '', time: '' }));
                       setShowGownModal(false);
                       setValidationErrors(prev => {
                         const n = { ...prev };
@@ -1359,6 +1418,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, color: '#6B5D4F', marginBottom: 6 },
   input: { padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#E8DCC8', backgroundColor: '#fff' },
   helperText: { fontSize: 11, color: '#6B5D4F', marginBottom: 6 },
+  branchHelpText: { fontSize: 12, color: '#6B5D4F', marginTop: 6 },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   countryCodeContainer: { paddingVertical: 12, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#F3F1ED', borderWidth: 1, borderColor: '#E8DCC8' },
   countryCodeText: { color: '#1a1a1a', fontWeight: '600' },

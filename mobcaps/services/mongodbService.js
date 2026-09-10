@@ -618,10 +618,10 @@ export const mongodbService = {
   // Get availability for a given date (and optional appointmentType and branch)
   async getAvailability(date, appointmentType, branch) {
     try {
-      if (!MONGODB_API_URL) return { date, bookedTimes: [] };
+      if (!MONGODB_API_URL || !String(branch || '').trim()) return { date, bookedTimes: [] };
       const params = new URLSearchParams();
       params.append('date', date);
-      params.append('branch', branch || 'Taguig Main'); // branch is required
+      params.append('branch', String(branch).trim());
       if (appointmentType) params.append('appointmentType', appointmentType);
       const url = this._buildUrl(`/appointments/availability?${params.toString()}`);
 
