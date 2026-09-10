@@ -36,6 +36,13 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
     const [serverFavorites, setServerFavorites] = useState([]);
     const [show3DViewer, setShow3DViewer] = useState(false);
 
+    // Pre-select a category when navigated here from the footer (e.g. "Wedding Gowns")
+    useEffect(() => {
+        if (route && route.params && route.params.category) {
+            setSelectedCategory(route.params.category);
+        }
+    }, [route && route.params && route.params.category]);
+
     useEffect(() => {
         setChatHidden(menuVisible || show3DViewer);
         return () => setChatHidden(false);

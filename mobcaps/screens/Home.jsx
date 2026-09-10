@@ -4,7 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   View, Text, ScrollView, TouchableOpacity, Image, 
   StyleSheet, Modal, TextInput, FlatList, Dimensions,
-  KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback
+  KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
@@ -1124,33 +1125,50 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
               <View style={styles.footerLinksGrid}>
                 <View style={styles.footerColumn}>
                   <Text style={styles.columnHeader}>SHOP</Text>
-                  <Text style={styles.footerLink}>Wedding Gowns</Text>
-                  <Text style={styles.footerLink}>Evening Dresses</Text>
-                  <Text style={styles.footerLink}>Ball Gowns</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Collection', { category: 'Wedding Dress' })}>
+                    <Text style={styles.footerLink}>Wedding Gowns</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => navigation.navigate('Collection', { category: 'Evening Gown' })}>
+                    <Text style={styles.footerLink}>Evening Dresses</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => navigation.navigate('Collection', { category: 'Ball Gown' })}>
+                    <Text style={styles.footerLink}>Ball Gowns</Text>
+                  </TouchableOpacity>
                 </View>
 
                 <View style={styles.footerColumn}>
                   <Text style={styles.columnHeader}>SERVICES</Text>
-                  <Text style={styles.footerLink}>Gown Rental</Text>
-                  <Text style={styles.footerLink}>Custom Orders</Text>
-                  <Text style={styles.footerLink}>Appointments</Text>
+                  {/* Auth-gated, same as web: not logged in -> opens login instead of the screen */}
+                  <TouchableOpacity onPress={() => handleAuthAction('Rentals')}>
+                    <Text style={styles.footerLink}>Gown Rental</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleAuthAction('Bespoke')}>
+                    <Text style={styles.footerLink}>Custom Orders</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleAuthAction('Appointments')}>
+                    <Text style={styles.footerLink}>Appointments</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
               <View style={styles.footerLinksGrid}>
                 <View style={styles.footerColumn}>
-                  <Text style={styles.columnHeader}>COMPANY</Text>
-                  <Text style={styles.footerLink}>About Us</Text>
-                  <Text style={styles.footerLink}>Our Story</Text>
-                  <Text style={styles.footerLink}>Contact</Text>
-                </View>
-
-                <View style={styles.footerColumn}>
-                  <Text style={styles.columnHeader}>FOLLOW</Text>
+                  <Text style={styles.columnHeader}>CONNECT</Text>
+                  <TouchableOpacity onPress={() => Linking.openURL('mailto:hannahvanessaexclusive@gmail.com')}>
+                    <Text style={styles.footerLink}>Contact</Text>
+                  </TouchableOpacity>
+                  <Text style={[styles.footerLink, { opacity: 0.8 }]}>Cadena de Amor, Taguig City</Text>
+                  <Text style={[styles.footerLink, { opacity: 0.8 }]}>Philippines</Text>
                   <View style={styles.socialRow}>
-                    <Instagram color="#FFF" size={16} />
-                    <Facebook color="#FFF" size={16} />
-                    <Mail color="#FFF" size={16} />
+                    <TouchableOpacity onPress={() => Linking.openURL('https://www.instagram.com/officialhvd/')}>
+                      <Instagram color="#FFF" size={16} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => Linking.openURL('https://www.facebook.com/HannahVanessaExclusive/')}>
+                      <Facebook color="#FFF" size={16} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => Linking.openURL('mailto:hannahvanessaexclusive@gmail.com')}>
+                      <Mail color="#FFF" size={16} />
+                    </TouchableOpacity>
                   </View>
                 </View>
               </View>
