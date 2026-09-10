@@ -2319,10 +2319,10 @@ successOverlay: {
 },
 successModalBox: {
   backgroundColor: '#FFFFFF',
-  paddingHorizontal: 40,
+  paddingHorizontal: 30,
   paddingVertical: 50,
   borderRadius: 8,
-  alignItems: 'center',
+  alignItems: 'stretch',
   width: '85%',
   elevation: 10,
 },
@@ -2332,6 +2332,8 @@ successTitle: {
   fontWeight: 'bold',
   color: '#10b981',
   marginBottom: 15,
+  textAlign: 'center',
+  alignSelf: 'stretch',
 },
 successMessage: {
   fontSize: 16,
@@ -2344,6 +2346,7 @@ successSubtext: {
   fontSize: 13,
   color: '#6B5D4F',
   textAlign: 'center',
+  alignSelf: 'stretch',
 },
 successSplash: {
   position: 'absolute',
