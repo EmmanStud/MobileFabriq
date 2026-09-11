@@ -574,6 +574,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         return;
       }
     }
+    setShowAIModal(false);
     setCameraVisible(true);
   };
 
@@ -584,19 +585,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         quality: 0.8,
         base64: false,
       });
-
-      // ── Validate face presence before closing camera ──
-      const faceDetected = await validateFacePresence(photo.uri);
-
-      if (!faceDetected) {
-        openAlert({
-          title: '⚠️ No Face Detected',
-          message: 'We could not detect a face in the photo. Please:\n\n• Center your face in the oval\n• Ensure good lighting\n• Remove sunglasses or mask\n• Move closer to the camera',
-        });
-        return; // Stay on camera — don't close
-      }
-
-      // Face detected — proceed
+      if (!photo?.uri) throw new Error('The camera did not return an image.');
       setCapturedImage(photo.uri);
       setCameraVisible(false);
       await analyzeSkinTone(photo.uri);
@@ -2695,7 +2684,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: '#FAF7F0' }}>
           {/* Modal Header */}
-          <View style={styles.aiModalHeader}>
+          <View style={[styles.aiModalHeader, { paddingTop: 14 + insets.top }]}>
             <Text style={styles.aiModalTitle}>AI Skin Tone Advisor</Text>
             <TouchableOpacity
               style={styles.aiModalCloseBtn}

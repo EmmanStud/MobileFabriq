@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { X, ShoppingBag, Calendar, Ruler, User } from 'lucide-react-native';
 import CustomAlertModal from './CustomAlertModal';
+import { sessionService } from '../services/sessionService';
 
 // Local Assets
 import FabriQLogo from '../assets/FabriQLogo.png';
@@ -46,6 +47,13 @@ export default function HamburgerMenu({
     } else {
       safeOnNavigate(routeName);
     }
+  };
+
+  const handleLogout = async () => {
+    setShowLogoutConfirm(false);
+    safeOnClose();
+    await sessionService.clearSession();
+    await safeOnLogout();
   };
 
   return (
@@ -156,9 +164,7 @@ export default function HamburgerMenu({
         confirmText="Log Out"
         cancelText="Cancel"
         onConfirm={() => {
-          setShowLogoutConfirm(false);
-          safeOnClose();
-          safeOnLogout();
+          handleLogout();
         }}
         onCancel={() => setShowLogoutConfirm(false)}
       />

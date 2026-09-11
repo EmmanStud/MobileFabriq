@@ -18,9 +18,12 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.fabriq.mobile",
-      "buildNumber": "4",
+      "buildNumber": "5",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "FabriQ uses the camera for AI color analysis and body measurements.",
+        "NSPhotoLibraryUsageDescription": "FabriQ uses your photo library when you choose an image for your designs or payment receipt.",
+        "NSPhotoLibraryAddUsageDescription": "FabriQ may save images you create to your photo library."
       }
     },
     "android": {
@@ -45,6 +48,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "scheme": "fabriq",
     "plugins": [
       [
         "expo-camera",
