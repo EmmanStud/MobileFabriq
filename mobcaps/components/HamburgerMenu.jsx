@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import React from 'react';
+import { Alert, Modal, View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { X, ShoppingBag, Calendar, Ruler, User } from 'lucide-react-native';
-import CustomAlertModal from './CustomAlertModal';
 import { sessionService } from '../services/sessionService';
 
 // Local Assets
@@ -31,8 +30,6 @@ export default function HamburgerMenu({
   currentRoute,
   styles,
 }) {
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-
   // Provide safe defaults for callbacks to avoid undefined calls
   const safeOnClose = typeof onClose === 'function' ? onClose : () => {};
   const safeOnNavigate = typeof onNavigate === 'function' ? onNavigate : () => {};
@@ -49,11 +46,27 @@ export default function HamburgerMenu({
     }
   };
 
-  const handleLogout = async () => {
-    setShowLogoutConfirm(false);
-    safeOnClose();
-    await sessionService.clearSession();
-    await safeOnLogout();
+  const performLogout = async () => {
+    try {
+      await sessionService.clearSession();
+      await safeOnLogout();
+    } catch (error) {
+      console.warn('Logout failed:', error);
+    } finally {
+      safeOnClose();
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Log Out',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Log Out', style: 'destructive', onPress: performLogout },
+      ],
+      { cancelable: true }
+    );
   };
 
   return (
@@ -145,7 +158,7 @@ export default function HamburgerMenu({
             {isLoggedIn && (
               <TouchableOpacity 
                 style={[mergedStyles.navRow, mergedStyles.logoutRow]} 
-                onPress={() => setShowLogoutConfirm(true)}
+                onPress={handleLogout}
               >
                 <X size={18} color="#D9534F" />
                 <Text style={[mergedStyles.navText, mergedStyles.logoutText]}>LOGOUT</Text>
@@ -156,18 +169,6 @@ export default function HamburgerMenu({
       </TouchableOpacity>
       </Modal>
 
-      <CustomAlertModal
-        visible={showLogoutConfirm}
-        mode="confirm"
-        title="Log Out"
-        message="Are you sure you want to log out?"
-        confirmText="Log Out"
-        cancelText="Cancel"
-        onConfirm={() => {
-          handleLogout();
-        }}
-        onCancel={() => setShowLogoutConfirm(false)}
-      />
     </>
   );
 }
