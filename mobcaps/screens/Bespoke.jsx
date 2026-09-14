@@ -604,6 +604,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         return;
       }
     }
+    setShowAIModal(false);
     setCameraVisible(true);
   };
 
@@ -615,6 +616,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         quality: 0.8,
         base64: false,
       });
+<<<<<<< HEAD
 
       if (!photo?.uri) {
         throw new Error('The camera did not return an image.');
@@ -632,6 +634,9 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       }
 
       // Face detected — proceed
+=======
+      if (!photo?.uri) throw new Error('The camera did not return an image.');
+>>>>>>> c246b837b28b90774874417aac556f4cede5133e
       setCapturedImage(photo.uri);
       setCameraVisible(false);
       await analyzeSkinTone(photo.uri);
@@ -2732,7 +2737,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: '#FAF7F0' }}>
           {/* Modal Header */}
-          <View style={styles.aiModalHeader}>
+          <View style={[styles.aiModalHeader, { paddingTop: 14 + insets.top }]}>
             <Text style={styles.aiModalTitle}>AI Skin Tone Advisor</Text>
             <TouchableOpacity
               style={styles.aiModalCloseBtn}

@@ -147,7 +147,11 @@ export default function App() {
   }; 
  
   const handleLogin = (token) => setAuthToken(token); 
-  const handleLogout = () => { setAuthToken(null); setUnreadCount(0); }; 
+  const handleLogout = async () => {
+    await sessionService.clearSession();
+    setAuthToken(null);
+    setUnreadCount(0);
+  };
   const handleNotificationRead = () => { if (authToken) fetchUnreadCount(authToken); }; 
  
   return (

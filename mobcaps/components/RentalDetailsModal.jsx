@@ -5,8 +5,8 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import * as WebBrowser from 'expo-web-browser';
 import { API_URL } from '../services/apiConfig';
+import { sessionService } from '../services/sessionService';
 
 const PENDING_PAYMONGO_KEY = 'mobcaps_pending_paymongo_payment';
 
@@ -66,11 +66,16 @@ export default function RentalDetailsModal({ visible, rental, onClose, onReceipt
     setProcessingPayment(true);
     try {
       const rentalId = rental.id || rental._id;
+      const session = authToken ? null : await sessionService.getSession();
+      const token = authToken || session?.token;
+      if (!token) {
+        throw new Error('Please sign in again before starting payment.');
+      }
       const response = await fetch(`${API_URL}/rentals/${rentalId}/paymongo-link`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
 
@@ -84,7 +89,10 @@ export default function RentalDetailsModal({ visible, rental, onClose, onReceipt
         paymentLinkId: data.paymentLinkId,
       }));
 
-      await WebBrowser.openBrowserAsync(data.paymentLinkUrl);
+      if (!(await Linking.canOpenURL(data.paymentLinkUrl))) {
+        throw new Error('The PayMongo checkout link could not be opened on this device.');
+      }
+      await Linking.openURL(data.paymentLinkUrl);
       setShowConfirm(false);
       setShowPayment(false);
       setError('');
@@ -294,8 +302,14 @@ export default function RentalDetailsModal({ visible, rental, onClose, onReceipt
 
               {/* Pay Now button */}
               {rental.status === 'for_payment' && !uploading && (
-                <TouchableOpacity style={styles.payNowBtn} onPress={() => setShowConfirm(true)}>
+                <TouchableOpacity
+                  style={[styles.payNowBtn, processingPayment && { opacity: 0.6 }]}
+                  onPress={handlePaymongoCheckout}
+                  disabled={processingPayment}
+                >
+                  {processingPayment ? <ActivityIndicator color="#1a1a1a" /> : (
                   <Text style={styles.payNowBtnText}>Pay Now</Text>
+                  )}
                 </TouchableOpacity>
               )}
 

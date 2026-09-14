@@ -35,6 +35,8 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
     const [authToken, setAuthToken] = useState(null); 
     const [serverFavorites, setServerFavorites] = useState([]);
     const [show3DViewer, setShow3DViewer] = useState(false);
+    const [viewerGown, setViewerGown] = useState(null);
+    const VIEWER_BASE_URL = 'https://fabriq-3d-server-production.up.railway.app';
 
     // Pre-select a category when navigated here from the footer (e.g. "Wedding Gowns")
     useEffect(() => {
@@ -47,8 +49,6 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
         setChatHidden(menuVisible || show3DViewer);
         return () => setChatHidden(false);
     }, [menuVisible, show3DViewer, setChatHidden]);
-
-    const VIEWER_BASE_URL = 'https://fabriq-3d-server-production.up.railway.app';
 
     const categories = ['All', 'Evening Gown', 'Wedding Dress', 'Ball Gown', 'Cocktail Dress'];
 
@@ -629,7 +629,11 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
                                         {selectedGown.has3DModel && (
                                             <TouchableOpacity 
                                                 style={styles.secondaryButton}
-                                                onPress={() => setShow3DViewer(true)}
+                                                onPress={() => {
+                                                    setViewerGown(selectedGown);
+                                                    setSelectedGown(null);
+                                                    setShow3DViewer(true);
+                                                }}
                                             >
                                                 <Text style={styles.secondaryButtonText}>View 3D</Text>
                                             </TouchableOpacity>
@@ -698,21 +702,32 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
                 </View>
             </Modal>
 
-            <Modal visible={show3DViewer && !!selectedGown?.model3dUrl} transparent animationType="slide">
+            <Modal
+                visible={show3DViewer && !!viewerGown?.model3dUrl}
+                transparent
+                animationType="slide"
+                onRequestClose={() => { setShow3DViewer(false); setViewerGown(null); }}
+            >
                 <View style={styles.viewerOverlay}>
                     <View style={styles.viewerCard}>
                         <View style={styles.viewerHeader}>
-                            <Text style={styles.viewerTitle}>{selectedGown?.name || '3D Preview'}</Text>
-                            <TouchableOpacity onPress={() => setShow3DViewer(false)}>
+                            <Text style={styles.viewerTitle}>{viewerGown?.name || '3D Preview'}</Text>
+                            <TouchableOpacity onPress={() => { setShow3DViewer(false); setViewerGown(null); }}>
                                 <X color="#333" size={24} />
                             </TouchableOpacity>
                         </View>
 
                         <WebView
+                            originWhitelist={['*']}
                             source={{
-                                uri: `${VIEWER_BASE_URL}/viewer?url=${encodeURIComponent(selectedGown?.model3dUrl || '')}`,
+                                uri: `${VIEWER_BASE_URL}/viewer?url=${encodeURIComponent(viewerGown?.model3dUrl || '')}`,
                             }}
                             style={styles.viewerWebView}
+                            javaScriptEnabled
+                            domStorageEnabled
+                            mixedContentMode="always"
+                            allowsInlineMediaPlayback
+                            mediaPlaybackRequiresUserAction={false}
                             startInLoadingState
                             renderLoading={() => (
                                 <View style={styles.viewerLoader}>
