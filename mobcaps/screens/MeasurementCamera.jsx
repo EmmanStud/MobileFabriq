@@ -19,12 +19,15 @@ export default function MeasurementCamera({ navigation, route }) {
   const height = route?.params?.height;
   const cameraRef = useRef(null);
   const countdownRef = useRef(null);
+  const warningTimeoutRef = useRef(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState('front');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [message, setMessage] = useState('');
   const [invalidReason, setInvalidReason] = useState('');
   const [countdown, setCountdown] = useState(null);
+  const [timerDuration, setTimerDuration] = useState(0); // 0 = Instant (default), 5, or 10 seconds
+  const [timerMenuOpen, setTimerMenuOpen] = useState(false);
 
   useEffect(() => {
     setChatHidden(true);
@@ -43,13 +46,22 @@ export default function MeasurementCamera({ navigation, route }) {
         clearInterval(countdownRef.current);
         countdownRef.current = null;
       }
+      if (warningTimeoutRef.current) {
+        clearTimeout(warningTimeoutRef.current);
+        warningTimeoutRef.current = null;
+      }
     };
   }, []);
 
   const startCountdown = () => {
     if (isAnalyzing || countdown !== null) return;
 
-    let secondsLeft = 10;
+    if (timerDuration === 0) {
+      handleCapture();
+      return;
+    }
+
+    let secondsLeft = timerDuration;
     setCountdown(secondsLeft);
     countdownRef.current = setInterval(() => {
       secondsLeft -= 1;
@@ -64,6 +76,12 @@ export default function MeasurementCamera({ navigation, route }) {
     }, 1000);
   };
 
+  const timerOptions = [
+    { label: 'Instant', value: 0 },
+    { label: '5s', value: 5 },
+    { label: '10s', value: 10 },
+  ];
+
   const cancelCountdown = () => {
     if (countdownRef.current) {
       clearInterval(countdownRef.current);
@@ -74,6 +92,11 @@ export default function MeasurementCamera({ navigation, route }) {
 
   const handleCapture = async () => {
     if (isAnalyzing || !cameraRef.current) return;
+
+    if (warningTimeoutRef.current) {
+      clearTimeout(warningTimeoutRef.current);
+      warningTimeoutRef.current = null;
+    }
 
     setIsAnalyzing(true);
     setMessage('Analyzing your photo... this can take up to 30 seconds');
@@ -106,6 +129,11 @@ export default function MeasurementCamera({ navigation, route }) {
       if (!analysis || analysis.imageSuitable !== true) {
         setInvalidReason(analysis?.reason || 'Please retake the photo with your full body clearly visible.');
         setMessage('This photo cannot be measured yet.');
+        warningTimeoutRef.current = setTimeout(() => {
+          setInvalidReason('');
+          setMessage('');
+          warningTimeoutRef.current = null;
+        }, 5000);
         return;
       }
 
@@ -164,11 +192,12 @@ export default function MeasurementCamera({ navigation, route }) {
           </Svg>
         </View>
       )}
-      {countdown !== null && (
-        <TouchableOpacity style={styles.countdownOverlay} onPress={cancelCountdown} activeOpacity={0.8}>
-          <Text style={styles.countdownNumber}>{countdown}</Text>
-          <Text style={styles.countdownHint}>Tap to cancel</Text>
-        </TouchableOpacity>
+      {timerMenuOpen && countdown === null && (
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={() => setTimerMenuOpen(false)}
+        />
       )}
       <SafeAreaView style={styles.overlay}>
         <View style={styles.topBar}>
@@ -190,7 +219,7 @@ export default function MeasurementCamera({ navigation, route }) {
         </View>
 
         <View style={styles.bottomControls}>
-          {message ? <Text style={styles.status}>{message}</Text> : null}
+          {message && !isAnalyzing ? <Text style={styles.status}>{message}</Text> : null}
           {invalidReason ? <Text style={styles.invalidReason}>{invalidReason}</Text> : null}
           {isAnalyzing ? (
             <View style={styles.loadingButton}>
@@ -198,13 +227,51 @@ export default function MeasurementCamera({ navigation, route }) {
               <Text style={styles.loadingText}>Analyzing your photo... this can take up to 30 seconds</Text>
             </View>
           ) : (
-            <TouchableOpacity style={styles.captureButton} onPress={startCountdown} disabled={countdown !== null}>
-              <View style={styles.captureInner}><Camera size={24} color="#000" /></View>
-              <Text style={styles.captureLabel}>{invalidReason ? 'Retake Photo' : 'Capture Photo'}</Text>
-            </TouchableOpacity>
+            <View style={styles.captureRow}>
+              <TouchableOpacity style={styles.captureButton} onPress={startCountdown} disabled={countdown !== null}>
+                <View style={styles.captureInner}><Camera size={24} color="#000" /></View>
+                <Text style={styles.captureLabel}>{invalidReason ? 'Retake Photo' : 'Capture Photo'}</Text>
+              </TouchableOpacity>
+
+              <View style={styles.timerDropdownWrap}>
+                {timerMenuOpen && (
+                  <View style={styles.timerMenu}>
+                    {timerOptions.map((opt) => (
+                      <TouchableOpacity
+                        key={opt.value}
+                        style={[styles.timerMenuItem, timerDuration === opt.value && styles.timerMenuItemActive]}
+                        onPress={() => {
+                          setTimerDuration(opt.value);
+                          setTimerMenuOpen(false);
+                        }}
+                      >
+                        <Text style={[styles.timerMenuItemText, timerDuration === opt.value && styles.timerMenuItemTextActive]}>
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.timerDropdownButton}
+                  disabled={countdown !== null}
+                  onPress={() => setTimerMenuOpen((open) => !open)}
+                >
+                  <Text style={styles.timerDropdownText}>
+                    {timerOptions.find((o) => o.value === timerDuration)?.label} ⌄
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
         </View>
       </SafeAreaView>
+      {countdown !== null && (
+        <TouchableOpacity style={styles.countdownOverlay} onPress={cancelCountdown} activeOpacity={0.8}>
+          <Text style={styles.countdownNumber}>{countdown}</Text>
+          <Text style={styles.countdownHint}>Tap to cancel</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -239,6 +306,15 @@ const styles = StyleSheet.create({
   captureButton: { alignItems: 'center' },
   captureInner: { width: 68, height: 68, borderRadius: 34, backgroundColor: '#D4AF37', justifyContent: 'center', alignItems: 'center', borderWidth: 4, borderColor: '#fff' },
   captureLabel: { color: '#fff', marginTop: 8, fontSize: 13 },
+  captureRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24 },
+  timerDropdownWrap: { position: 'relative' },
+  timerDropdownButton: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' },
+  timerDropdownText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  timerMenu: { position: 'absolute', bottom: '115%', right: 0, backgroundColor: '#1a1a1a', borderRadius: 10, paddingVertical: 4, minWidth: 90, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  timerMenuItem: { paddingVertical: 10, paddingHorizontal: 14 },
+  timerMenuItemActive: { backgroundColor: 'rgba(212,175,55,0.2)' },
+  timerMenuItemText: { color: '#fff', fontSize: 13 },
+  timerMenuItemTextActive: { color: '#D4AF37', fontWeight: '700' },
   loadingButton: { alignItems: 'center', paddingVertical: 12 },
   loadingText: { color: '#fff', marginTop: 8, fontSize: 14 },
   centered: { flex: 1, backgroundColor: '#FAF7F0', justifyContent: 'center', alignItems: 'center' },

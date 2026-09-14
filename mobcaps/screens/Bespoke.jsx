@@ -231,6 +231,12 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
 
   const [allGowns, setAllGowns] = useState([]);
   const [recommendedGowns, setRecommendedGowns] = useState([]);
+  // Tracks the current in-flight skin analysis so a stale result (from an
+  // analysis whose modal was closed before it finished) never gets applied.
+  const analysisSessionRef = useRef(0);
+  // Prevents a double-tap (or a stale re-press while the camera is closing)
+  // from firing a second concurrent takePictureAsync call.
+  const isCapturingRef = useRef(false);
   const cameraRef = React.useRef(null);
   const scrollRef = React.useRef(null);
   const recommendationRef = React.useRef(null);
@@ -444,6 +450,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   };
 
   const analyzeSkinTone = async (imageUri) => {
+    const sessionId = ++analysisSessionRef.current;
     try {
       setIsAnalyzing(true);
 
@@ -490,6 +497,12 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         insight: analysis.insightText,
       };
 
+      // If the modal was closed (or a new scan started) while this request
+      // was in flight, this result is stale — discard it silently.
+      if (analysisSessionRef.current !== sessionId) {
+        return;
+      }
+
       setSkinAnalysis(analysisResult);
 
       if (analysisResult.recommendedColors.length > 0) {
@@ -509,7 +522,9 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         message: 'Could not analyze skin tone. Please try again with better lighting.',
       });
     } finally {
-      setIsAnalyzing(false);
+      if (analysisSessionRef.current === sessionId) {
+        setIsAnalyzing(false);
+      }
     }
   }; 
 
@@ -558,6 +573,21 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
     return insights[key] || 'Your unique skin tone has its own natural beauty. The recommended palette is curated to enhance your complexion.';
   };
 
+  // Closes the AI Skin Tone modal. If an analysis was actively running when
+  // the user closed it, this is a real cancel — clear the photo, analysis,
+  // and recommendations too, not just the pending network result, so no
+  // leftover result from this or an earlier scan can reappear later.
+  const handleCloseAIModal = () => {
+    analysisSessionRef.current += 1; // discard any in-flight analysis
+    if (isAnalyzing) {
+      setIsAnalyzing(false);
+      setSkinAnalysis(null);
+      setRecommendedGowns([]);
+      setCapturedImage(null);
+    }
+    setShowAIModal(false);
+  };
+
   const handleOpenCamera = async () => {
     if (!permission) {
       // Camera permissions are still loading.
@@ -578,12 +608,17 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   };
 
   const takePicture = async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || isCapturingRef.current) return;
+    isCapturingRef.current = true;
     try {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
         base64: false,
       });
+
+      if (!photo?.uri) {
+        throw new Error('The camera did not return an image.');
+      }
 
       // ── Validate face presence before closing camera ──
       const faceDetected = await validateFacePresence(photo.uri);
@@ -604,6 +639,8 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
     } catch (err) {
       console.error('takePicture error:', err);
       openAlert({ title: 'Error', message: 'Could not take photo. Please try again.' });
+    } finally {
+      isCapturingRef.current = false;
     }
   };
 
@@ -2691,7 +2728,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         visible={showAIModal}
         animationType="slide"
         transparent={false}
-        onRequestClose={() => setShowAIModal(false)}
+        onRequestClose={handleCloseAIModal}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: '#FAF7F0' }}>
           {/* Modal Header */}
@@ -2699,7 +2736,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
             <Text style={styles.aiModalTitle}>AI Skin Tone Advisor</Text>
             <TouchableOpacity
               style={styles.aiModalCloseBtn}
-              onPress={() => setShowAIModal(false)}
+              onPress={handleCloseAIModal}
             >
               <X size={20} color="#1a1a1a" />
             </TouchableOpacity>
@@ -2758,6 +2795,8 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
                     <TouchableOpacity
                       style={styles.aiRemoveBtn}
                       onPress={() => {
+                        analysisSessionRef.current += 1; // discard any in-flight analysis
+                        setIsAnalyzing(false);
                         setCapturedImage(null);
                         setSkinAnalysis(null);
                         setRecommendedGowns([]);
@@ -3237,10 +3276,10 @@ const styles = StyleSheet.create({
   },
   floatingAIBtn: {
     position: 'absolute',
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    right: 24,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: '#D4AF37',
     justifyContent: 'center',
     alignItems: 'center',

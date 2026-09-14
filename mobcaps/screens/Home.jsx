@@ -87,8 +87,8 @@ const heroCollections = [
   }
 ];
 
-// Top Gowns for Carousel
-const topGowns = [
+// Top Gowns for Carousel — used only as a fallback if the live featured-gowns fetch fails
+const defaultTopGowns = [
   {
     id: 1,
     name: 'Celestial Dream',
@@ -232,6 +232,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
   // Carousel States
   const [currentSlide, setCurrentSlide] = useState(0);
   const [heroSlide, setHeroSlide] = useState(0);
+  const [featuredGowns, setFeaturedGowns] = useState(defaultTopGowns);
   const [showInitialBranding, setShowInitialBranding] = useState(true);
   
   // UI State
@@ -331,11 +332,11 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
 
   // Carousel handlers
   const nextSlide = () => {
-    setCurrentSlide((prev) => (prev + 1) % topGowns.length);
+    setCurrentSlide((prev) => (prev + 1) % defaultTopGowns.length);
   };
 
   const prevSlide = () => {
-    setCurrentSlide((prev) => (prev - 1 + topGowns.length) % topGowns.length);
+    setCurrentSlide((prev) => (prev - 1 + defaultTopGowns.length) % defaultTopGowns.length);
   };
 
   // Initial branding animation - show once then hide
@@ -369,6 +370,44 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
       setHeroSlide((prev) => (prev + 2) % heroCollections.length);
     }, 6000);
     return () => clearInterval(heroInterval);
+  }, []);
+
+  // Load admin-controlled Featured Gowns from the backend, same source and
+  // priority order as the web version: featuredHome-flagged items first,
+  // then any active items, then the static defaults if the request fails.
+  useEffect(() => {
+    const loadFeaturedGowns = async () => {
+      try {
+        const response = await fetch(`${API_URL}/inventory/public`);
+        if (!response.ok) throw new Error('Failed to load inventory');
+        const data = await response.json();
+        const items = Array.isArray(data.items) ? data.items : [];
+        const activeItems = items.filter((item) => item.status !== 'archived');
+        const selectedItems = activeItems.filter((item) => item.featuredHome).slice(0, 6);
+        const fallbackItems = activeItems.slice(0, 6);
+        const source = selectedItems.length > 0 ? selectedItems : fallbackItems;
+
+        const mapped = source.map((item) => {
+          const rawImage = (item.image || '').trim();
+          const image = rawImage
+            ? { uri: rawImage.startsWith('http') ? rawImage : `${API_URL}${rawImage}` }
+            : { uri: 'https://images.unsplash.com/photo-1763336016192-c7b62602e993?w=800' };
+          return {
+            id: item._id || item.id,
+            name: item.name,
+            category: item.category || 'Gown',
+            price: `₱${Number(item.price || 0).toLocaleString('en-PH')}`,
+            image,
+          };
+        });
+
+        setFeaturedGowns(mapped.length > 0 ? mapped : defaultTopGowns);
+      } catch (err) {
+        console.warn('Failed to load Featured Gowns, using defaults:', err.message);
+        setFeaturedGowns(defaultTopGowns);
+      }
+    };
+    loadFeaturedGowns();
   }, []);
 
   // Featured gowns carousel auto-rotation
@@ -1100,7 +1139,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
           <Text style={styles.tagline}>THIS SEASON'S BEST</Text>
           <Text style={[styles.sectionTitle, { fontSize: moderateScale(32) }]}>Featured Gowns</Text>
 
-          {topGowns.map((gown) => (
+          {featuredGowns.map((gown) => (
             <TouchableOpacity
               key={gown.id}
               style={styles.featuredCard}
