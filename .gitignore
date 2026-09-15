@@ -255,3 +255,5 @@ buck-out/
 .fakebuckversion
 
 # End of https://www.toptal.com/developers/gitignore/api/reactnative
+
+web_fabriq_website/
