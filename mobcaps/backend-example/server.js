@@ -500,6 +500,9 @@ function authenticateToken(req, res, next) {
     const payload = jwt.verify(token, JWT_SECRET);
     // Attach user info to request
     req.user = { id: payload.id, email: payload.email, role: payload.role || 'customer' };
+    console.log('[AI SAVE] auth role:', req.user.role);
+    console.log('[AI SAVE] auth id present:', Boolean(req.user.id));
+    console.log('[AI SAVE] auth email present:', Boolean(req.user.email));
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token.' });
@@ -1320,8 +1323,16 @@ app.get('/api/inventory/:id', async (req, res) => {
 app.post('/api/skin-analysis/save', authenticateToken, async (req, res) => {
   try {
     const customerId = req.user.id;
+    console.log('[AI SAVE] handler: server inline route');
+    console.log('[AI SAVE] CustomerAccount lookup by id:', customerId ? 'STARTED' : 'SKIPPED');
     const customer = await CustomerAccount.findById(customerId);
+    console.log('[AI SAVE] CustomerAccount lookup by id:', customer ? 'FOUND' : 'NOT FOUND');
+    if (!customer && req.user.email) {
+      const customerByEmail = await CustomerAccount.findOne({ email: String(req.user.email).trim().toLowerCase() });
+      console.log('[AI SAVE] CustomerAccount lookup by email:', customerByEmail ? 'FOUND' : 'NOT FOUND');
+    }
     if (!customer) {
+      console.warn('[AI SAVE] customer lookup failed: JWT id did not resolve in customer_accounts');
       return res.status(404).json({ message: 'Customer not found.' });
     }
 

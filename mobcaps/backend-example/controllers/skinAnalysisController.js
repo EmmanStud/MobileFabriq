@@ -4,12 +4,22 @@ const { CustomerAccount } = require('../server.js');
 const saveSkinAnalysis = async (req, res) => {
   try {
     const customerId = req.user?.id || req.user?._id;
+    console.log('[AI SAVE] handler: skinAnalysisController');
+    console.log('[AI SAVE] auth role:', req.user?.role || 'missing');
+    console.log('[AI SAVE] auth id present:', Boolean(customerId));
+    console.log('[AI SAVE] auth email present:', Boolean(req.user?.email));
     if (!customerId) {
       return res.status(401).json({ message: 'Not authenticated.' });
     }
 
     const customer = await CustomerAccount.findById(customerId);
+    console.log('[AI SAVE] CustomerAccount lookup by id:', customer ? 'FOUND' : 'NOT FOUND');
+    if (!customer && req.user?.email) {
+      const customerByEmail = await CustomerAccount.findOne({ email: String(req.user.email).trim().toLowerCase() });
+      console.log('[AI SAVE] CustomerAccount lookup by email:', customerByEmail ? 'FOUND' : 'NOT FOUND');
+    }
     if (!customer) {
+      console.warn('[AI SAVE] customer lookup failed: JWT id did not resolve in customer_accounts');
       return res.status(404).json({ message: 'Customer not found.' });
     }
 

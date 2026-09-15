@@ -233,6 +233,8 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
 
   const [allGowns, setAllGowns] = useState([]);
   const [recommendedGowns, setRecommendedGowns] = useState([]);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
+  const [scanGender, setScanGender] = useState(null);
   // Tracks the current in-flight skin analysis so a stale result (from an
   // analysis whose modal was closed before it finished) never gets applied.
   const analysisSessionRef = useRef(0);
@@ -307,14 +309,46 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
     return score;
   };
 
-  const filterRecommendedGowns = (gowns, recommendedColors) => {
-    if (!gowns || gowns.length === 0) return [];
-    if (!recommendedColors || recommendedColors.length === 0) return gowns.slice(0, 8);
+  const filterRecommendedGowns = (gowns, recommendedColors, gender) => {
+    const inventory = gowns || [];
+
+    const inventoryByTargetGender = inventory.reduce((counts, gown) => {
+      const targetGender = gown.targetGender || 'missing';
+      counts[targetGender] = (counts[targetGender] || 0) + 1;
+      return counts;
+    }, {});
+    console.log('[AI] Selected gender:', gender);
+    console.log('[AI] Inventory by targetGender:', inventoryByTargetGender);
+    console.log('[AI] scanGender =', gender);
+    console.log('[AI] total gowns =', inventory.length);
+
+    if (inventory.length === 0) {
+      console.log('[AI] Gender eligible count:', 0);
+      console.log('[AI] gender eligible =', 0);
+      console.log('[AI] eligible item names =', []);
+      console.log('[AI] recommended colors =', recommendedColors);
+      console.log('[AI] final recommendations =', []);
+      return [];
+    }
+
+    const genderFiltered = gender
+      ? inventory.filter(gown => gown.targetGender === gender || gown.targetGender === 'unisex')
+      : [];
+    console.log('[AI] Gender eligible count:', genderFiltered.length);
+    console.log('[AI] gender eligible =', genderFiltered.length);
+    console.log('[AI] eligible item names =', genderFiltered.map(gown => gown.name));
+    console.log('[AI] recommended colors =', recommendedColors);
+
+    if (!recommendedColors || recommendedColors.length === 0) {
+      const finalRecommendations = genderFiltered.slice(0, 8);
+      console.log('[AI] final recommendations =', finalRecommendations.map(gown => gown.name));
+      return finalRecommendations;
+    }
 
     const colorsLower = recommendedColors.map(c => c.toLowerCase());
 
     // Score each gown
-    const scored = gowns.map(gown => {
+    const scored = genderFiltered.map(gown => {
       const gownColor = (gown.color || '').toLowerCase();
       const gownName = (gown.name || '').toLowerCase();
       const gownCategory = (gown.category || '').toLowerCase();
@@ -342,17 +376,10 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
     // Sort by score descending
     const sorted = scored.sort((a, b) => b.score - a.score);
 
-    // Take top matches — minimum 6, maximum 12
-    const topMatches = sorted.filter(g => g.score > 0).slice(0, 12);
-
-    // If less than 6 matches, fill with remaining gowns (lower score ones)
-    if (topMatches.length < 6) {
-      const remaining = sorted.filter(g => g.score === 0).slice(0, 6 - topMatches.length);
-      remaining.forEach(g => { g.matchPct = Math.floor(Math.random() * 20) + 30; });
-      return [...topMatches, ...remaining];
-    }
-
-    return topMatches;
+    // Keep eligible items even when their color does not match; color only ranks them.
+    const finalRecommendations = sorted.slice(0, 12);
+    console.log('[AI] final recommendations =', finalRecommendations.map(gown => gown.name));
+    return finalRecommendations;
   };
 
   const applyAIRecommendation = async () => {
@@ -414,6 +441,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         undertone: analysis.undertone,
         skinHex: analysis.hex,
         skinRgb: analysis.rgb,
+        gender: scanGender,
         recommendedColors: analysis.recommendedColors || [],
         recommendedGownIds: (gowns || [])
           .filter(g => g._id || g.id)
@@ -452,6 +480,8 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   };
 
   const analyzeSkinTone = async (imageUri) => {
+    if (!scanGender) return;
+
     const sessionId = ++analysisSessionRef.current;
     try {
       setIsAnalyzing(true);
@@ -476,6 +506,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         body: JSON.stringify({
           image: manipResult.base64,
           mimeType: 'image/jpeg',
+          gender: scanGender,
         }),
       });
 
@@ -495,7 +526,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         undertone: analysis.undertone,
         rgb: analysis.skinRgb,
         hex: analysis.skinHex,
-        recommendedColors: analysis.recommendedColors,
+        recommendedColors: analysis.recommendedColors || [],
         insight: analysis.insightText,
       };
 
@@ -511,8 +542,16 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         setFormData(prev => ({ ...prev, preferredColors: analysisResult.recommendedColors[0] }));
       }
 
-      const filtered = filterRecommendedGowns(allGowns, analysisResult.recommendedColors);
+      const filtered = filterRecommendedGowns(allGowns, analysisResult.recommendedColors, scanGender);
       setRecommendedGowns(filtered);
+      console.log('[AI] Analysis selected scanGender:', scanGender);
+      console.log('[AI] Analysis recommendedColors:', analysisResult.recommendedColors);
+      console.log('[AI] Analysis inventory count:', allGowns.length);
+      console.log('[AI] Analysis gender eligible count:', allGowns.filter(gown => (
+        gown.targetGender === scanGender || gown.targetGender === 'unisex'
+      )).length);
+      console.log('[AI] Analysis final recommendations:', filtered.length);
+      console.log('[AI] Recommended count:', filtered.length);
 
       // Save the real analysis result to color_anal for admin analytics — non-blocking
       saveSkinAnalysisToDb(analysisResult, filtered);
@@ -529,6 +568,14 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       }
     }
   }; 
+
+  useEffect(() => {
+    if (!skinAnalysis || !scanGender || inventoryLoading) return;
+
+    const filtered = filterRecommendedGowns(allGowns, skinAnalysis.recommendedColors, scanGender);
+    setRecommendedGowns(filtered);
+    console.log('[AI] Recommended count:', filtered.length);
+  }, [skinAnalysis, scanGender, allGowns, inventoryLoading]);
 
 
   const getRecommendedColors = (tone, undertone) => {
@@ -637,6 +684,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       // Face detected — proceed
       setCapturedImage(photo.uri);
       setCameraVisible(false);
+      setShowAIModal(true);
       await analyzeSkinTone(photo.uri);
 
     } catch (err) {
@@ -790,6 +838,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
 
   useEffect(() => {
     const loadGowns = async () => {
+      setInventoryLoading(true);
       try {
         const url = `${API_CONFIG.BASE_URL}/inventory/public`;
         const response = await fetch(url);
@@ -803,11 +852,29 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
             image: item.image,
             price: item.price,
             category: item.category,
+            targetGender: item.targetGender,
           }));
           setAllGowns(mapped);
+          console.log('[AI] Inventory count:', mapped.length);
+          mapped.forEach(item => {
+            console.log('[AI] Inventory item:', {
+              id: item.id,
+              name: item.name,
+              category: item.category,
+              color: item.color,
+              targetGender: item.targetGender,
+            });
+          });
+          console.log('[AI] Inventory by targetGender:', mapped.reduce((counts, item) => {
+            const targetGender = item.targetGender || 'missing';
+            counts[targetGender] = (counts[targetGender] || 0) + 1;
+            return counts;
+          }, {}));
         }
       } catch (err) {
         console.error('Failed to load gowns for recommendations:', err);
+      } finally {
+        setInventoryLoading(false);
       }
     };
 
@@ -2775,16 +2842,38 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
                 </View>
               </View>
 
+              <Text style={styles.aiGenderLabel}>Who are we styling today?</Text>
+              <View style={styles.aiGenderRow}>
+                <TouchableOpacity
+                  style={[styles.aiGenderOption, scanGender === 'men' && styles.aiGenderOptionActive]}
+                  onPress={() => setScanGender('men')}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.aiGenderOptionText, scanGender === 'men' && styles.aiGenderOptionTextActive]}>
+                    Menswear
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.aiGenderOption, scanGender === 'women' && styles.aiGenderOptionActive]}
+                  onPress={() => setScanGender('women')}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.aiGenderOptionText, scanGender === 'women' && styles.aiGenderOptionTextActive]}>
+                    Womenswear
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               {/* ── Scan Button ── */}
               <TouchableOpacity
-                style={[styles.aiScanBtn, isAnalyzing && styles.aiButtonDisabled]}
+                style={[styles.aiScanBtn, (isAnalyzing || !scanGender) && styles.aiButtonDisabled]}
                 onPress={handleOpenCamera}
-                disabled={isAnalyzing}
+                disabled={isAnalyzing || !scanGender}
                 activeOpacity={0.85}
               >
                 <CameraIcon size={18} color={capturedImage ? '#6B5D4F' : '#fff'} />
                 <Text style={[styles.aiScanBtnText, capturedImage && { color: '#6B5D4F' }]}>
-                  {isAnalyzing ? 'Analyzing...' : capturedImage ? 'Retake Photo' : 'Scan My Skin Tone'}
+                  {isAnalyzing ? 'Analyzing...' : !scanGender ? 'Select an option above' : capturedImage ? 'Retake Photo' : 'Scan My Skin Tone'}
                 </Text>
               </TouchableOpacity>
 
@@ -3016,7 +3105,11 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
                     />
                   ) : (
                     <View style={styles.aiNoMatch}>
-                      <Text style={styles.aiNoMatchText}>No exact matches in current inventory.</Text>
+                      <Text style={styles.aiNoMatchText}>
+                        {inventoryLoading
+                          ? 'Loading classified inventory...'
+                          : `No classified ${scanGender === 'men' ? 'Menswear' : 'Womenswear'} items are currently available for this recommendation.`}
+                      </Text>
                       <TouchableOpacity style={styles.aiNoMatchBtn} onPress={() => navigation.navigate('Collection')}>
                         <Text style={styles.aiNoMatchBtnText}>Browse All Collections</Text>
                         <ArrowRight size={14} color="#D4AF37" />
@@ -3383,6 +3476,39 @@ const styles = StyleSheet.create({
   aiButtonDisabled: {
     backgroundColor: '#ccc',
     opacity: 0.7,
+  },
+  aiGenderLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B5D4F',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  aiGenderRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  aiGenderOption: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E8DCC8',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+  },
+  aiGenderOptionActive: {
+    backgroundColor: '#1a1a1a',
+    borderColor: '#1a1a1a',
+  },
+  aiGenderOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B5D4F',
+  },
+  aiGenderOptionTextActive: {
+    color: '#fff',
   },
 
   // ── Result Card ──
