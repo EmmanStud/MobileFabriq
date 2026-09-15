@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     View,
     Text,
@@ -22,6 +22,85 @@ import HamburgerMenu from '../components/HamburgerMenu';
 import Header from '../components/Header';
 import { CollectionGridSkeleton } from '../components/Skeleton';
 import { useChatVisibility } from '../contexts/ChatVisibilityContext';
+
+const CollectionCard = React.memo(function CollectionCard({
+    item,
+    isFavorite,
+    onSelect,
+    onToggleFavorite,
+    onBookNow,
+    onImageError,
+}) {
+    return (
+        <TouchableOpacity style={[styles.card, item.status === 'rented' && { opacity: 0.65 }]} onPress={() => onSelect(item)}>
+            <View style={styles.imageWrap}>
+                {item.hasImage ? (
+                    <View style={{ width: '100%', height: '100%' }}>
+                        <View style={[StyleSheet.absoluteFill, { backgroundColor: item.placeholderColor, justifyContent: 'center', alignItems: 'center' }]}>
+                            <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
+                        </View>
+                        <Image
+                            source={item.image}
+                            style={styles.cardImage}
+                            resizeMode="cover"
+                            onError={() => onImageError(item.id, item.image?.uri)}
+                        />
+                    </View>
+                ) : (
+                    <View style={[styles.cardImage, { backgroundColor: item.placeholderColor, justifyContent: 'center', alignItems: 'center' }]}>
+                        <ShoppingBag size={28} color="rgba(255,255,255,0.5)" />
+                        <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600', textAlign: 'center', marginTop: 6 }}>
+                            {item.name}
+                        </Text>
+                    </View>
+                )}
+                {item.status === 'rented' && (
+                    <View style={[styles.badge, { backgroundColor: '#6B5D4F' }]}>
+                        <Text style={styles.badgeText}>Rented</Text>
+                    </View>
+                )}
+                {item.status === 'reserved' && (
+                    <View style={[styles.badge, { backgroundColor: '#D4AF37' }]}>
+                        <Text style={styles.badgeText}>Reserved</Text>
+                    </View>
+                )}
+                <TouchableOpacity
+                    style={styles.favBtn}
+                    onPress={() => onToggleFavorite(item.id)}
+                >
+                    <Heart size={18} color={isFavorite ? '#e11d48' : '#6B5D4F'} fill={isFavorite ? '#e11d48' : 'none'} />
+                </TouchableOpacity>
+            </View>
+
+            <View style={styles.cardContent}>
+                <View style={styles.metaRow}>
+                    <View style={styles.ratingRow}>
+                        <Star size={14} color="#D4AF37" />
+                        <Text style={styles.ratingText}>{item.rating}</Text>
+                    </View>
+                    <Text style={styles.categoryText}>{item.category}</Text>
+                </View>
+                <Text style={styles.cardTitle}>{item.name}</Text>
+                <Text style={styles.cardSubtitle}>{item.color}</Text>
+                <View style={styles.cardFooter}>
+                    <View>
+                        <Text style={styles.smallLabel}>Rental Price</Text>
+                        <Text style={styles.price}>₱{item.price.toLocaleString()}</Text>
+                    </View>
+                    {item.status === 'rented' ? (
+                        <View style={[styles.bookBtn, { backgroundColor: '#999' }]}>
+                            <Text style={styles.bookBtnText}>Rented</Text>
+                        </View>
+                    ) : item.status === 'available' ? (
+                        <TouchableOpacity style={styles.bookBtn} onPress={() => onBookNow(item)}>
+                            <Text style={styles.bookBtnText}>Book Now</Text>
+                        </TouchableOpacity>
+                    ) : null}
+                </View>
+            </View>
+        </TouchableOpacity>
+    );
+});
 
 export default function Collection({ navigation, route, unreadCount = 0 }) {
     const { setChatHidden } = useChatVisibility();
@@ -232,18 +311,15 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
 
 
     // Only filter by search and category; status is used for UI only
-    const filteredGowns = gowns.filter((gown) => {
+    const filteredGowns = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
-        const matchesSearch =
-            gown.name.toLowerCase().includes(q) || gown.color.toLowerCase().includes(q);
-        const matchesCategory = selectedCategory === 'All' || gown.category === selectedCategory;
-        return matchesSearch && matchesCategory;
-    });
-
-    // Debug logs
-    console.log('📊 Inventory:', gowns.length);
-    console.log('📊 Final rendered:', filteredGowns.length);
-    // ...existing code...
+        return gowns.filter((gown) => {
+            const matchesSearch =
+                gown.name.toLowerCase().includes(q) || gown.color.toLowerCase().includes(q);
+            const matchesCategory = selectedCategory === 'All' || gown.category === selectedCategory;
+            return matchesSearch && matchesCategory;
+        });
+    }, [gowns, searchQuery, selectedCategory]);
 
     const toggleFavorite = async (gownId) => { 
         const gown = gowns.find(g => g.id === gownId || g._id === gownId); 
@@ -303,94 +379,33 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
     };
 
     // When an image URL returns a 404 or fails to load, fall back to color placeholder
-    const handleImageError = (itemId, uri) => {
+    const handleImageError = useCallback((itemId, uri) => {
         console.warn(`❌ Image failed to load for item ${itemId}: ${uri}`);
         setGowns(prev => prev.map(g =>
             g.id === itemId ? { ...g, hasImage: false, image: null } : g
         ));
-    };
+    }, []);
 
-    const renderCard = ({ item }) => (
-        <TouchableOpacity style={[styles.card, item.status === 'rented' && { opacity: 0.65 }]} onPress={() => setSelectedGown(item)}>
-            <View style={styles.imageWrap}>
-                {item.hasImage ? (
-                    <View style={{ width: '100%', height: '100%' }}>
-                        {/* Color background shown while image loads */}
-                        <View style={[StyleSheet.absoluteFill, { backgroundColor: item.placeholderColor, justifyContent: 'center', alignItems: 'center' }]}>
-                            <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
-                        </View>
-                        <Image
-                            source={item.image}
-                            style={styles.cardImage}
-                            resizeMode="cover"
-                            onError={() => handleImageError(item.id, item.image?.uri)}
-                        />
-                    </View>
-                ) : (
-                    <View style={[styles.cardImage, { backgroundColor: item.placeholderColor, justifyContent: 'center', alignItems: 'center' }]}>
-                        <ShoppingBag size={28} color="rgba(255,255,255,0.5)" />
-                        <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600', textAlign: 'center', marginTop: 6 }}>
-                            {item.name}
-                        </Text>
-                    </View>
-                )}
-                {item.status === 'rented' && (
-                    <View style={[styles.badge, { backgroundColor: '#6B5D4F' }]}>
-                        <Text style={styles.badgeText}>Rented</Text>
-                    </View>
-                )}
-                {item.status === 'reserved' && (
-                    <View style={[styles.badge, { backgroundColor: '#D4AF37' }]}>
-                        <Text style={styles.badgeText}>Reserved</Text>
-                    </View>
-                )}
-                <TouchableOpacity
-                    style={styles.favBtn}
-                    onPress={() => toggleFavorite(item.id)}
-                >
-                    <Heart size={18} color={favorites.includes(item.id) ? '#e11d48' : '#6B5D4F'} fill={favorites.includes(item.id) ? '#e11d48' : 'none'} />
-                </TouchableOpacity>
-            </View>
-
-            <View style={styles.cardContent}>
-                <View style={styles.metaRow}>
-                    <View style={styles.ratingRow}>
-                        <Star size={14} color="#D4AF37" />
-                        <Text style={styles.ratingText}>{item.rating}</Text>
-                    </View>
-                    <Text style={styles.categoryText}>{item.category}</Text>
-                </View>
-                <Text style={styles.cardTitle}>{item.name}</Text>
-                <Text style={styles.cardSubtitle}>{item.color}</Text>
-                <View style={styles.cardFooter}>
-                    <View>
-                        <Text style={styles.smallLabel}>Rental Price</Text>
-                        <Text style={styles.price}>₱{item.price.toLocaleString()}</Text>
-                    </View>
-                    {item.status === 'rented' ? (
-                        <View style={[styles.bookBtn, { backgroundColor: '#999' }]}>
-                            <Text style={styles.bookBtnText}>Rented</Text>
-                        </View>
-                    ) : item.status === 'available' ? (
-                        <TouchableOpacity
-                            style={styles.bookBtn}
-                            onPress={async () => {
-                                const logged = await sessionService.isLoggedIn();
-                                if (logged) { 
-                                  navigation.navigate('Rentals', { 
-                                                                        selectedGown: item
-                                  }); 
-                                } 
-                                else { navigation.navigate('Home', { openAuth: true }); }
-                            }}
-                        >
-                            <Text style={styles.bookBtnText}>Book Now</Text>
-                        </TouchableOpacity>
-                    ) : null}
-                </View>
-            </View>
-        </TouchableOpacity>
-    );
+    const handleSelectGown = useCallback((gown) => setSelectedGown(gown), []);
+    const handleToggleFavorite = useCallback((gownId) => toggleFavorite(gownId), [favorites, gowns, authToken, serverFavorites]);
+    const handleBookNow = useCallback(async (item) => {
+        const logged = await sessionService.isLoggedIn();
+        if (logged) {
+            navigation.navigate('Rentals', { selectedGown: item });
+        } else {
+            navigation.navigate('Home', { openAuth: true });
+        }
+    }, [navigation]);
+    const renderCard = useCallback(({ item }) => (
+        <CollectionCard
+            item={item}
+            isFavorite={favorites.includes(item.id)}
+            onSelect={handleSelectGown}
+            onToggleFavorite={handleToggleFavorite}
+            onBookNow={handleBookNow}
+            onImageError={handleImageError}
+        />
+    ), [favorites, handleSelectGown, handleToggleFavorite, handleBookNow, handleImageError]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -402,76 +417,79 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
                 onBellPress={() => navigation.navigate('Notifications')} 
             /> 
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <View style={styles.mainPadding}>
-                    <View style={styles.header}>
-                        <Text style={styles.title}>Shop All</Text>
-                        <Text style={styles.lead}>
-                            Discover our curated collection of exquisite gowns for every occasion.
-                        </Text>
+            <FlatList
+                data={loading ? [] : filteredGowns}
+                renderItem={renderCard}
+                keyExtractor={(item) => String(item.id)}
+                numColumns={2}
+                columnWrapperStyle={styles.column}
+                contentContainerStyle={styles.scrollContent}
+                removeClippedSubviews
+                initialNumToRender={6}
+                maxToRenderPerBatch={6}
+                updateCellsBatchingPeriod={50}
+                windowSize={5}
+                ListHeaderComponent={(
+                    <View style={styles.mainPadding}>
+                        <View style={styles.header}>
+                            <Text style={styles.title}>Shop All</Text>
+                            <Text style={styles.lead}>
+                                Discover our curated collection of exquisite gowns for every occasion.
+                            </Text>
+                        </View>
+
+                        {loading ? (
+                            <CollectionGridSkeleton count={6} />
+                        ) : (
+                            <>
+                                <View style={styles.controls}>
+                                    <View style={styles.searchRow}>
+                                        <Search size={16} color="#6B5D4F" />
+                                        <TextInput
+                                            style={styles.searchInput}
+                                            placeholder="Search gowns..."
+                                            value={searchQuery}
+                                            onChangeText={setSearchQuery}
+                                            placeholderTextColor="#6B5D4F"
+                                        />
+                                    </View>
+
+                                    <View style={styles.filterRow}>
+                                        {categories.map((cat) => (
+                                            <TouchableOpacity
+                                                key={cat}
+                                                style={[
+                                                    styles.filterBtn,
+                                                    selectedCategory === cat ? styles.filterBtnActive : styles.filterBtnInactive,
+                                                ]}
+                                                onPress={() => setSelectedCategory(cat)}
+                                            >
+                                                <Text style={selectedCategory === cat ? styles.filterTextActive : styles.filterTextInactive}>
+                                                    {cat}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                <Text style={styles.results}>{filteredGowns.length} {filteredGowns.length === 1 ? 'gown' : 'gowns'} found</Text>
+                            </>
+                        )}
                     </View>
-
-                    {loading ? (
-                        <CollectionGridSkeleton count={6} />
-                    ) : (
-                        <>
-                            <View style={styles.controls}>
-                                <View style={styles.searchRow}>
-                                    <Search size={16} color="#6B5D4F" />
-                                    <TextInput
-                                        style={styles.searchInput}
-                                        placeholder="Search gowns..."
-                                        value={searchQuery}
-                                        onChangeText={setSearchQuery}
-                                        placeholderTextColor="#6B5D4F"
-                                    />
-                                </View>
-
-                                <View style={styles.filterRow}>
-                                    {categories.map((cat) => (
-                                        <TouchableOpacity
-                                            key={cat}
-                                            style={[
-                                                styles.filterBtn,
-                                                selectedCategory === cat ? styles.filterBtnActive : styles.filterBtnInactive,
-                                            ]}
-                                            onPress={() => setSelectedCategory(cat)}
-                                        >
-                                            <Text style={selectedCategory === cat ? styles.filterTextActive : styles.filterTextInactive}>
-                                                {cat}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
-
-                            <Text style={styles.results}>{filteredGowns.length} {filteredGowns.length === 1 ? 'gown' : 'gowns'} found</Text>
-
-                            <FlatList
-                                data={filteredGowns}
-                                renderItem={renderCard}
-                                keyExtractor={(i) => i.id}
-                                numColumns={2}
-                                columnWrapperStyle={styles.column}
-                                scrollEnabled={false}
-                                contentContainerStyle={{ paddingBottom: 40 }}
-                            />
-
-                            {filteredGowns.length === 0 && (
-                                <View style={styles.emptyState}>
-                                    <Text style={styles.emptyTitle}>No gowns found</Text>
-                                    <TouchableOpacity
-                                        style={styles.resetBtn}
-                                        onPress={() => { setSearchQuery(''); setSelectedCategory('All'); }}
-                                    >
-                                        <Text style={styles.resetBtnText}>Reset Filters</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-                        </>
-                    )}
-                </View>
-            </ScrollView>
+                )}
+                ListEmptyComponent={!loading && filteredGowns.length === 0 ? (
+                    <View style={styles.emptyState}>
+                        <Text style={styles.emptyTitle}>No gowns found</Text>
+                        <TouchableOpacity
+                            style={styles.resetBtn}
+                            onPress={() => { setSearchQuery(''); setSelectedCategory('All'); }}
+                        >
+                            <Text style={styles.resetBtnText}>Reset Filters</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : null}
+                ListFooterComponent={<View style={{ height: 40 }} />}
+            />
 
             <Modal visible={!!selectedGown} transparent animationType="fade">
                 <View style={styles.modalOverlay}>
