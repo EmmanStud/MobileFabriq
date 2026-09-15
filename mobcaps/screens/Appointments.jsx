@@ -371,11 +371,12 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
         if (session.token) setAuthToken(session.token);
         const current = await sessionService.getCurrentUser();
         setCurrentUser(current || null);
+        let profile = null;
         const profileResponse = await fetch(`${API_URL}/customers/profile`, {
           headers: { Authorization: `Bearer ${session.token}` },
         });
         if (profileResponse.ok) {
-          const profile = await profileResponse.json();
+          profile = await profileResponse.json();
           const nextPreferredBranch = normalizePreferredBranch(profile.preferredBranch);
           setPreferredBranch(nextPreferredBranch);
           setFormData(prev => ({
@@ -394,7 +395,8 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
         const nameFromUser = current && (current.name || (current.firstName ? `${current.firstName} ${current.lastName || ''}`.trim() : ''));
         const fullName = nameFromUser || nameFromSession || '';
 
-        const phone = current?.phoneNumber 
+        const phone = profile?.phoneNumber
+          || current?.phoneNumber
           || current?.phone 
           || current?.contactNumber 
           || ''; 
@@ -409,7 +411,7 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
           email: current?.email || prev.email, 
           contactNumber: normalized, 
         })); 
-        setPhoneVerified(Boolean(current?.phoneVerified));
+        setPhoneVerified(Boolean(profile?.phoneVerified ?? current?.phoneVerified));
       } else {
         setAppointmentsLoading(false);
       }
