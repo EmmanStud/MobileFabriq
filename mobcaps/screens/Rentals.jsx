@@ -125,6 +125,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
   const [authToken, setAuthToken] = useState(null);
   const [rentalsLoading, setRentalsLoading] = useState(true);
   const fetchInFlightRef = useRef(false);
+  const paymentVerificationInFlightRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [unavailableDates, setUnavailableDates] = useState([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
@@ -362,6 +363,13 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
   };
 
   const verifyPendingPaymongoPayment = useCallback(async () => {
+    if (paymentVerificationInFlightRef.current) {
+      // A verification check is already running (e.g. a duplicate AppState
+      // "active" event fired). Skip this call so we never send more than one
+      // verification request, and never show more than one alert, per payment.
+      return;
+    }
+    paymentVerificationInFlightRef.current = true;
     try {
       const session = await sessionService.getSession();
       const token = session?.token || authToken;
@@ -377,6 +385,10 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
         return;
       }
 
+      // Clear the pending key before calling the backend so any overlapping
+      // trigger that slips past the in-flight guard has nothing left to act on.
+      await clearPendingPaymongoPayment();
+
       const result = await mongodbService.verifyPaymongoPayment(rentalId, paymentLinkId, token);
       await fetchUserRentals(token);
 
@@ -384,18 +396,21 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
         if (selectedRental && String(selectedRental.id || selectedRental._id) === String(rentalId)) {
           setSelectedRental((prev) => ({ ...prev, ...result.rental }));
         }
-        await clearPendingPaymongoPayment();
-        showRentalAlert('Payment Verified', 'Your rental payment was confirmed by the backend.');
+        showRentalAlert(
+          'Payment Verified',
+          'Your payment has been successfully verified and your rental is now confirmed for pickup.'
+        );
         return;
       }
 
       if (result.message) {
         showRentalAlert('Payment Status', result.message);
       }
-      await clearPendingPaymongoPayment();
     } catch (err) {
       console.warn('PayMongo verification check failed:', err);
       showRentalAlert('Payment Verification Failed', 'We could not confirm your payment status yet. Please refresh your rentals.');
+    } finally {
+      paymentVerificationInFlightRef.current = false;
     }
   }, [authToken, selectedRental]);
 
