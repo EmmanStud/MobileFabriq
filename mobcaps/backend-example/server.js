@@ -15,9 +15,15 @@ const nodemailer = require('nodemailer');
 const multer = require('multer');
 require('dotenv').config();
 const skinAnalysisRouter = require('./routes/skinAnalysis.js');
+const { generateReply, analyzeImage } = require('./services/aiService.js');
 
 const app = express();
 const PORT = process.env.PORT || 3456;
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is required to start the backend');
+}
 
 app.use(cors({
   origin: '*',
@@ -25,6 +31,28 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json({ limit: '15mb' }));
+
+app.post('/api/chat-messages', (req, res) => {
+  const conversationId = req.body.conversationId || crypto.randomUUID();
+  return res.json({ success: true, conversationId });
+});
+
+app.post('/api/chat-messages/reply', async (req, res) => {
+  const userQuery = String(req.body.userQuery || '').trim();
+  if (!userQuery) return res.status(400).json({ error: 'userQuery is required' });
+
+  try {
+    const reply = await generateReply({ userQuery });
+    return res.json({
+      success: true,
+      provider: reply.provider,
+      message: { sender: 'admin', text: reply.text },
+    });
+  } catch (error) {
+    console.error('AI reply error:', error.message);
+    return res.status(502).json({ error: 'AI service unavailable' });
+  }
+});
 
 // Serve uploaded images as static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -306,6 +334,19 @@ userSchema.pre('save', async function (next) {
 const User = mongoose.model('User', userSchema, 'customer_accounts');
 const CustomerAccount = User;
 
+const notificationSchema = new mongoose.Schema({
+  customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'CustomerAccount', required: true },
+  pushToken: { type: String },
+  title: { type: String, default: '' },
+  body: { type: String, default: '' },
+  data: { type: mongoose.Schema.Types.Mixed, default: {} },
+  readAt: { type: Date, default: null },
+  createdAt: { type: Date, default: Date.now },
+});
+
+notificationSchema.index({ customerId: 1, pushToken: 1 }, { unique: true, sparse: true });
+const Notification = mongoose.model('Notification', notificationSchema, 'notifications');
+
 const validatePassword = (password) => {
   if (!password || password.trim() === '') {
     return 'Password is required';
@@ -431,6 +472,7 @@ const inventorySchema = new mongoose.Schema({
   lastRented: { type: Date },
   description: { type: String },
   image: { type: String }, // Cloud storage image URL
+  featured: { type: Boolean, default: false },
   rating: { type: Number, default: 4.5 },
   stock: { type: Number, default: 1 },
   deletedAt: { type: Date, default: null },
@@ -508,6 +550,66 @@ function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'Invalid or expired token.' });
   }
 }
+
+app.post('/api/skin-analysis/analyze', async (req, res) => {
+  const { image, mimeType = 'image/jpeg', gender } = req.body;
+  if (!image) return res.status(400).json({ message: 'image is required' });
+
+  try {
+    const { result, provider } = await analyzeImage({
+      image,
+      mimeType,
+      prompt: `Analyze the person's visible cheek skin tone for a clothing color recommendation. Return JSON only with this shape: {"imageSuitable": boolean, "reason": string, "skinTone": "fair|light|medium|tan|deep", "undertone": "warm|cool|neutral", "skinHex": string, "skinRgb": {"r": number, "g": number, "b": number}, "recommendedColors": string[], "insightText": string}. Use gender context only for clothing recommendations: ${gender || 'unspecified'}. If lighting or framing makes analysis unreliable, set imageSuitable false and explain why.`,
+    });
+    return res.json({ success: true, provider, analysis: result });
+  } catch (error) {
+    console.error('Skin analysis error:', error.message);
+    return res.status(502).json({ message: 'Skin analysis service unavailable' });
+  }
+});
+
+app.post('/api/notifications/register-device', authenticateToken, async (req, res) => {
+  const pushToken = String(req.body.pushToken || '').trim();
+  if (!pushToken) return res.status(400).json({ message: 'pushToken is required' });
+
+  try {
+    await Notification.findOneAndUpdate(
+      { customerId: req.user.id, pushToken },
+      { $set: { pushToken } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Device token registration error:', error.message);
+    return res.status(500).json({ message: 'Failed to register device token' });
+  }
+});
+
+app.get('/api/notifications/mine', authenticateToken, async (req, res) => {
+  try {
+    const notifications = await Notification.find({ customerId: req.user.id })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+    return res.json(notifications);
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to fetch notifications' });
+  }
+});
+
+app.patch('/api/notifications/mine/:id/read', authenticateToken, async (req, res) => {
+  try {
+    const notification = await Notification.findOneAndUpdate(
+      { _id: req.params.id, customerId: req.user.id },
+      { $set: { readAt: new Date() } },
+      { new: true },
+    ).lean();
+    if (!notification) return res.status(404).json({ message: 'Notification not found' });
+    return res.json(notification);
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to mark notification as read' });
+  }
+});
 
 // Ensure indexes exist (createIndexes is safe and idempotent)
 (async () => {
@@ -1264,6 +1366,7 @@ app.get('/api/inventory/public', async (req, res) => {
         lastRented: item.lastRented,
         description: item.description,
         image: normalizeImageUrl(item.image, req),
+        featured: item.featured === true || item.isFeatured === true,
         rating: item.rating,
         stock: item.stock,
         deletedAt: item.deletedAt || null,

@@ -109,6 +109,9 @@ export default function MeasurementCamera({ navigation, route }) {
       }
 
       const session = await sessionService.getSession();
+      if (!session?.token) {
+        throw new Error('Please sign in before using body measurements.');
+      }
       const response = await fetchAPI('/body-measurement/analyze', {
         method: 'POST',
         timeout: 45000,
@@ -123,7 +126,7 @@ export default function MeasurementCamera({ navigation, route }) {
       const analysis = data?.analysis;
 
       if (!response.ok || data?.success !== true) {
-        throw new Error('The measurement service could not analyze this photo.');
+        throw new Error(data?.message || data?.error || `Measurement service error (${response.status})`);
       }
 
       if (!analysis || analysis.imageSuitable !== true) {
