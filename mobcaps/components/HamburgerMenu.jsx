@@ -1,7 +1,6 @@
 import React from 'react';
-import { Alert, Modal, View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { X, ShoppingBag, Calendar, Ruler, User } from 'lucide-react-native';
-import { sessionService } from '../services/sessionService';
 
 // Local Assets
 import FabriQLogo from '../assets/FabriQLogo.png';
@@ -44,29 +43,6 @@ export default function HamburgerMenu({
     } else {
       safeOnNavigate(routeName);
     }
-  };
-
-  const performLogout = async () => {
-    try {
-      await sessionService.clearSession();
-      await safeOnLogout();
-    } catch (error) {
-      console.warn('Logout failed:', error);
-    } finally {
-      safeOnClose();
-    }
-  };
-
-  const handleLogout = () => {
-    Alert.alert(
-      'Log Out',
-      'Are you sure you want to log out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Log Out', style: 'destructive', onPress: performLogout },
-      ],
-      { cancelable: true }
-    );
   };
 
   return (
@@ -154,16 +130,6 @@ export default function HamburgerMenu({
               </TouchableOpacity> 
             )} 
 
-            {/* LOGOUT - Only show if logged in */}
-            {isLoggedIn && (
-              <TouchableOpacity 
-                style={[mergedStyles.navRow, mergedStyles.logoutRow]} 
-                onPress={handleLogout}
-              >
-                <X size={18} color="#D9534F" />
-                <Text style={[mergedStyles.navText, mergedStyles.logoutText]}>LOGOUT</Text>
-              </TouchableOpacity>
-            )}
           </View>
         </View>
       </TouchableOpacity>

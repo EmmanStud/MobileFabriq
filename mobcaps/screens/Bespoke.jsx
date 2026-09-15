@@ -29,6 +29,7 @@ import { API_URL, API_CONFIG, fetchAPI } from '../services/apiConfig';
 import HamburgerMenu from '../components/HamburgerMenu';
 import Header from '../components/Header';
 import CustomAlertModal from '../components/CustomAlertModal';
+import { OrderListSkeleton } from '../components/Skeleton';
 import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 import { showAlert } from '../services/platformService';
 import { useResponsive } from '../utils/responsive';
@@ -169,6 +170,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   const [showColorDropdown, setShowColorDropdown] = useState(false);
   const [showFabricDropdown, setShowFabricDropdown] = useState(false);
   const [userOrders, setUserOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
   const [authToken, setAuthToken] = useState(null);
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
@@ -616,7 +618,6 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         quality: 0.8,
         base64: false,
       });
-<<<<<<< HEAD
 
       if (!photo?.uri) {
         throw new Error('The camera did not return an image.');
@@ -634,9 +635,6 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       }
 
       // Face detected — proceed
-=======
-      if (!photo?.uri) throw new Error('The camera did not return an image.');
->>>>>>> c246b837b28b90774874417aac556f4cede5133e
       setCapturedImage(photo.uri);
       setCameraVisible(false);
       await analyzeSkinTone(photo.uri);
@@ -825,6 +823,8 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
           setUserEmail(currentUser.email.toLowerCase());
           // Fetch custom orders for this user
           fetchUserOrders(currentUser.email.toLowerCase());
+        } else {
+          setOrdersLoading(false);
         }
         if (currentUser && currentUser.email) {
           const fullName = currentUser.name || (currentUser.firstName ? `${currentUser.firstName} ${currentUser.lastName || ''}`.trim() : '');
@@ -844,7 +844,11 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
             contactNumber: normalized, 
           })); 
           setPhoneVerified(Boolean(currentUser.phoneVerified)); 
+        } else {
+          setOrdersLoading(false);
         }
+      } else {
+        setOrdersLoading(false);
       }
     };
     loadGowns();
@@ -958,6 +962,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   };
 
   const fetchUserOrders = async (email) => {
+    setOrdersLoading(true);
     try {
       console.log('Fetching custom orders for', email);
       const session = await sessionService.getSession();
@@ -969,6 +974,8 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       setUserOrders(norm);
     } catch (err) {
       console.error('Failed to fetch user orders:', err);
+    } finally {
+      setOrdersLoading(false);
     }
   };
 
@@ -2055,7 +2062,9 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
         ) : (
           // EXISTING ORDERS
           <View style={styles.mainPadding}>
-            {userOrders.filter(o => !['completed','rejected','cancelled'].includes(o.status)).length > 0 ? (
+            {ordersLoading ? (
+              <OrderListSkeleton count={3} />
+            ) : userOrders.filter(o => !['completed','rejected','cancelled'].includes(o.status)).length > 0 ? (
               <View style={styles.ordersList}>
                 {userOrders
                   .filter(o => !['completed','rejected','cancelled'].includes(o.status))

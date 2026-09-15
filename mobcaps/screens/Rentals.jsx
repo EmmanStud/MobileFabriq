@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import { mongodbService } from '../services/mongodbService';
 import HamburgerMenu from '../components/HamburgerMenu';
 import Header from '../components/Header';
 import CustomAlertModal from '../components/CustomAlertModal';
+import { RentalListSkeleton } from '../components/Skeleton';
 
 import RentalDetailsModal from '../components/RentalDetailsModal';
 
@@ -122,7 +123,8 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
   const [userRentals, setUserRentals] = useState([]);
   const [userEmail, setUserEmail] = useState(null);
   const [authToken, setAuthToken] = useState(null);
-  const [rentalsLoading, setRentalsLoading] = useState(false);
+  const [rentalsLoading, setRentalsLoading] = useState(true);
+  const fetchInFlightRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [unavailableDates, setUnavailableDates] = useState([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
@@ -258,7 +260,11 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
         }
         if (session.token) {
           fetchUserRentals(session.token);
+        } else {
+          setRentalsLoading(false);
         }
+      } else {
+        setRentalsLoading(false);
       }
     })();
 
@@ -288,7 +294,11 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
     useCallback(() => {
       (async () => {
         const session = await sessionService.getSession();
-        if (session?.token) fetchUserRentals(session.token);
+        if (session?.token) {
+          fetchUserRentals(session.token);
+        } else {
+          setRentalsLoading(false);
+        }
       })();
     }, [])
   );
@@ -311,6 +321,8 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
 
   // --- API calls ---
   const fetchUserRentals = async (token) => {
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
     setRentalsLoading(true);
     try {
       console.log('📡 Fetching rentals with token');
@@ -322,6 +334,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
     } finally {
       setRentalsLoading(false);
       setRefreshing(false);
+      fetchInFlightRef.current = false;
     }
   };
 
@@ -1208,8 +1221,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
           <View style={styles.mainPadding}> 
             {rentalsLoading ? ( 
               <View style={styles.loadingContainer}> 
-                <ActivityIndicator size="large" color="#1a1a1a" /> 
-                <Text style={styles.loadingText}>Loading reviews...</Text> 
+                <RentalListSkeleton count={3} />
               </View> 
             ) : ( 
               <> 
@@ -1401,8 +1413,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
           <View style={styles.mainPadding}> 
             {rentalsLoading ? ( 
               <View style={styles.loadingContainer}> 
-                <ActivityIndicator size="large" color="#1a1a1a" /> 
-                <Text style={styles.loadingText}>Loading history...</Text> 
+                <RentalListSkeleton count={3} />
               </View> 
             ) : (() => { 
               const historyRentals = userRentals.filter(r => 
@@ -1465,8 +1476,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
           <View style={styles.mainPadding}>
             {rentalsLoading ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#1a1a1a" />
-                <Text style={styles.loadingText}>Loading your rentals...</Text>
+                <RentalListSkeleton count={3} />
               </View>
             ) : (
               <>

@@ -16,9 +16,10 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { Calendar, Clock, MapPin, ChevronRight, Menu } from 'lucide-react-native';
 import HamburgerMenu from '../components/HamburgerMenu';
 import Header from '../components/Header';
+import CustomAlertModal from '../components/CustomAlertModal';
+import { AppointmentListSkeleton } from '../components/Skeleton';
 import { sessionService } from '../services/sessionService';
 import { mongodbService } from '../services/mongodbService';
-import { showAlert } from '../services/platformService';
 import { API_URL } from '../services/apiConfig';
 
 export default function Appointments({ navigation, route, unreadCount = 0 }) {
@@ -45,10 +46,12 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [showTimeModal, setShowTimeModal] = useState(false);
   const [userAppointments, setUserAppointments] = useState([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [takenTimes, setTakenTimes] = useState([]);
   const [authToken, setAuthToken] = useState(null);
   const [phoneVerified, setPhoneVerified] = useState(false);
+  const [preferredBranch, setPreferredBranch] = useState('Taguig Main');
 
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [rescheduleAppointmentId, setRescheduleAppointmentId] = useState(null);
@@ -69,9 +72,53 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
   const [availableGowns, setAvailableGowns] = useState([]);
   const [showGownModal, setShowGownModal] = useState(false);
 
+  const [alertConfig, setAlertConfig] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    mode: 'alert',
+    onConfirm: null,
+    onCancel: null,
+  });
+
+  const closeAppointmentAlert = () => {
+    setAlertConfig((prev) => ({ ...prev, visible: false, onConfirm: null, onCancel: null }));
+  };
+
+  const showAppointmentAlert = (title, message, onConfirm) => {
+    setAlertConfig({
+      visible: true,
+      title,
+      message,
+      mode: 'alert',
+      onConfirm: () => {
+        if (typeof onConfirm === 'function') onConfirm();
+        closeAppointmentAlert();
+      },
+      onCancel: null,
+    });
+  };
+
   useEffect(() => {
     if (route?.params?.activeTab) setActiveTab(route.params.activeTab);
   }, [route?.params?.activeTab]);
+
+  // Auto-fill "Schedule Fitting" gown passed from Collection.jsx gown details
+  useEffect(() => {
+    const gownParam = route?.params?.selectedGown;
+    if (!gownParam) return;
+    const gownId = gownParam._id || gownParam.id;
+    const gownBranch = typeof gownParam.branch === 'string' ? gownParam.branch.trim() : '';
+
+    setAvailableGowns(prev => (
+      prev.some(g => (g._id || g.id) === gownId) ? prev : [...prev, gownParam]
+    ));
+    setSelectedGownId(gownId);
+    setSelectedGownName(gownParam.name || '');
+    setFormData(prev => ({ ...prev, appointmentType: 'fitting', branch: gownBranch, time: '' }));
+    setActiveTab('new');
+    fetchGowns();
+  }, [route?.params?.selectedGown]);
 
   useEffect(() => {
     const anyActivityOpen =
@@ -119,6 +166,9 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
   };
 
   const branches = ['Taguig Main', 'BGC Branch', 'Makati Branch', 'Quezon City'];
+  const normalizePreferredBranch = (branch) => (
+    branch === 'Taguig Main - Cadena de Amor' ? 'Taguig Main' : branches.includes(branch) ? branch : 'Taguig Main'
+  );
 
   const getMinAppointmentDate = () => { 
     const now = new Date(); 
@@ -142,19 +192,21 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
   };
 
   const handleReschedule = async () => {
+    console.log('[RESCHEDULE DEBUG] submit tapped', { rescheduleAppointmentId, rescheduleData, rescheduleGownId });
     const errors = {};
     if (!rescheduleData.date) errors.date = 'Please select a date';
     if (!rescheduleData.time) errors.time = 'Please select a time';
     if (!rescheduleData.reason.trim()) errors.reason = 'A reason is required for rescheduling';
-    const rescheduleGown = availableGowns.find(gown => (gown._id || gown.id) === rescheduleGownId);
-    if (rescheduleGownId && !(typeof rescheduleGown?.branch === 'string' && rescheduleGown.branch.trim())) {
+    if (rescheduleGownId && !String(rescheduleData.branch || '').trim()) {
       errors.branch = 'Unable to determine the gown\'s branch. Please try again.';
     }
-    if (Object.keys(errors).length > 0) { setRescheduleErrors(errors); return; }
+    if (Object.keys(errors).length > 0) {
+      console.log('[RESCHEDULE DEBUG] blocked by validation:', errors);
+      setRescheduleErrors(errors);
+      return;
+    }
 
-    const resolvedRescheduleBranch = rescheduleGownId
-      ? rescheduleGown.branch.trim()
-      : rescheduleData.branch;
+    const resolvedRescheduleBranch = rescheduleData.branch;
 
     setRescheduling(true);
     setRescheduleErrors({});
@@ -166,10 +218,11 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
         { ...rescheduleData, branch: resolvedRescheduleBranch },
         token
       );
+      console.log('[RESCHEDULE DEBUG] API response:', res);
       if (res.success) {
         setShowRescheduleModal(false);
         await fetchUserAppointments(userEmail);
-        showAlert('Success', 'Appointment rescheduled successfully!');
+        showAppointmentAlert('Success', 'Appointment rescheduled successfully!');
       } else {
         if (res.status === 409) {
           setRescheduleErrors({ time: 'This slot is already taken. Pick another time.' });
@@ -200,7 +253,7 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
         setCancelAppointmentId(null);
         setCancellationReason('');
         await fetchUserAppointments(userEmail);
-        showAlert('Success', 'Appointment cancelled successfully!');
+        showAppointmentAlert('Success', 'Appointment cancelled successfully!');
       } else {
         console.warn('[APPOINTMENT CANCELLATION DEBUG]', {
           appointmentId: cancelAppointmentId,
@@ -291,8 +344,14 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
   
     if (selectedDate < minDate) { 
       const minStr = getLocalDateString(minDate); 
-      showAlert('Invalid Date', `Earliest available date is ${minStr}.`); 
+      showAppointmentAlert('Invalid Date', `Earliest available date is ${minStr}.`); 
       return; 
+    }
+
+    if (webCalendarState.active === 'reschedule') {
+      handleRescheduleDateConfirm(selectedDate);
+      setWebCalendarState({ active: null, display: null });
+      return;
     }
 
     setFormData((prev) => ({
@@ -312,10 +371,24 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
         if (session.token) setAuthToken(session.token);
         const current = await sessionService.getCurrentUser();
         setCurrentUser(current || null);
+        const profileResponse = await fetch(`${API_URL}/customers/profile`, {
+          headers: { Authorization: `Bearer ${session.token}` },
+        });
+        if (profileResponse.ok) {
+          const profile = await profileResponse.json();
+          const nextPreferredBranch = normalizePreferredBranch(profile.preferredBranch);
+          setPreferredBranch(nextPreferredBranch);
+          setFormData(prev => ({
+            ...prev,
+            branch: prev.appointmentType === 'fitting' ? prev.branch : nextPreferredBranch,
+          }));
+        }
         if (current && current.email) {
           setUserEmail(current.email.toLowerCase());
           // Fetch user appointments from DB
           await fetchUserAppointments(current.email.toLowerCase());
+        } else {
+          setAppointmentsLoading(false);
         }
         const nameFromSession = session.name;
         const nameFromUser = current && (current.name || (current.firstName ? `${current.firstName} ${current.lastName || ''}`.trim() : ''));
@@ -337,6 +410,8 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
           contactNumber: normalized, 
         })); 
         setPhoneVerified(Boolean(current?.phoneVerified));
+      } else {
+        setAppointmentsLoading(false);
       }
     };
     checkSession();
@@ -398,6 +473,7 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
 
   // Fetch user appointments from MongoDB
   const fetchUserAppointments = async (email) => {
+    setAppointmentsLoading(true);
     try {
       const session = await sessionService.getSession();
       const token = session?.token || authToken;
@@ -418,13 +494,15 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
     } catch (err) {
       console.error('Error fetching appointments:', err);
       setUserAppointments([]);
+    } finally {
+      setAppointmentsLoading(false);
     }
   };
 
   const handleSubmit = async () => {
     // Phone verification gate — same pattern as Rentals 
     if (!phoneVerified) { 
-      showAlert( 
+      showAppointmentAlert( 
         'Phone Number Not Verified', 
         'You need to verify your phone number in Profile Settings before booking an appointment. This helps us confirm your booking.', 
         () => navigation.navigate('Profile') 
@@ -478,6 +556,9 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
 
     if (Object.keys(newErrors).length > 0) {
       setValidationErrors(newErrors);
+      if (newErrors.appointmentType) {
+        showAppointmentAlert('Select Appointment Type', 'Please select an appointment type before confirming your booking.');
+      }
       return;
     }
 
@@ -495,7 +576,7 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
     const token = session?.token || authToken;
 
     if (!token) {
-      showAlert('Session Expired', 'Please log in again to book an appointment.');
+      showAppointmentAlert('Session Expired', 'Please log in again to book an appointment.');
       return;
     }
 
@@ -527,20 +608,20 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
         setUserAppointments(normalized);
       } else {
         if (res.status === 409) {
-          showAlert('Time slot unavailable', 'The selected time slot is already taken. Please pick another time.');
+          showAppointmentAlert('Time slot unavailable', 'The selected time slot is already taken. Please pick another time.');
           await fetchAvailability(formData.date, formData.appointmentType, formData.branch);
           return;
         }
         if (res.status === 400 && res.error?.includes('phone number')) {
-          showAlert('Profile Incomplete', 'Please add your phone number in your profile settings before booking.');
+          showAppointmentAlert('Profile Incomplete', 'Please add your phone number in your profile settings before booking.');
           return;
         }
-        showAlert('Error', res.error || 'Failed to book appointment. Please try again.');
+        showAppointmentAlert('Error', res.error || 'Failed to book appointment. Please try again.');
         return;
       }
     } catch (err) {
       console.error('Error creating appointment:', err);
-      showAlert('Error', 'Failed to book appointment. Please check your connection.');
+      showAppointmentAlert('Error', 'Failed to book appointment. Please check your connection.');
       return;
     }
 
@@ -632,11 +713,13 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
                   <TouchableOpacity
                     key={type.value}
                     onPress={() => {
-                      setFormData(prev => ({ ...prev, appointmentType: type.value }));
                       if (type.value === 'fitting') fetchGowns();
                       if (type.value !== 'fitting') {
                         setSelectedGownId('');
                         setSelectedGownName('');
+                        setFormData(prev => ({ ...prev, appointmentType: type.value, branch: preferredBranch }));
+                      } else {
+                        setFormData(prev => ({ ...prev, appointmentType: type.value }));
                       }
                     }}
                     style={[styles.typeCard, formData.appointmentType === type.value ? styles.typeCardActive : null]}
@@ -646,6 +729,9 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
                   </TouchableOpacity>
                 ))}
               </View>
+              {validationErrors.appointmentType && (
+                <Text style={styles.errorMessage}>{validationErrors.appointmentType}</Text>
+              )}
 
               {/* Form Card */}
               <View style={styles.formCard}>
@@ -781,8 +867,16 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
                       }}
                       disabled={formData.appointmentType === 'fitting'}
                     >
-                      <Text style={{ color: formData.branch ? '#1a1a1a' : '#B91C1C' }}>
-                        {formData.branch || 'Branch unavailable for this gown'}
+                      <Text style={{
+                        color: formData.branch
+                          ? '#1a1a1a'
+                          : (!selectedGownId ? '#999' : '#B91C1C')
+                      }}>
+                        {formData.branch
+                          ? formData.branch
+                          : !selectedGownId
+                            ? 'Select a gown first'
+                            : 'Branch unavailable for this gown'}
                       </Text>
                     </TouchableOpacity>
                     {formData.appointmentType === 'fitting' && selectedGownBranch && (
@@ -815,11 +909,14 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
           )}
 
           {activeTab === 'existing' && (
-            <View style={{ gap: 12 }}>
-              {userAppointments.filter(a => !['completed','cancelled'].includes(a.status)).length > 0 ? (
-                userAppointments
-                  .filter(a => !['completed','cancelled'].includes(a.status))
-                  .map(appointment => (
+            appointmentsLoading ? (
+              <AppointmentListSkeleton count={3} />
+            ) : (
+              <View style={{ gap: 12 }}>
+                {userAppointments.filter(a => !['completed','cancelled'].includes(a.status)).length > 0 ? (
+                  userAppointments
+                    .filter(a => !['completed','cancelled'].includes(a.status))
+                    .map(appointment => (
                 <View key={appointment.id} style={styles.appCard}>
                   <View style={styles.appHeader}>
                     <View>
@@ -874,22 +971,24 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
 
                   {['pending', 'scheduled'].includes(appointment.status) && (
                     <View style={styles.appActionsRow}>
-                      <TouchableOpacity 
-                        style={styles.actionBtn}
-                        onPress={() => {
-                          setRescheduleAppointmentId(appointment.id);
-                          const appointmentGownId = appointment.selectedGown || '';
-                          const appointmentGown = availableGowns.find(gown => (gown._id || gown.id) === appointmentGownId);
-                          setRescheduleGownId(appointmentGownId);
-                          setRescheduleData({ date: '', time: '', branch: appointmentGown?.branch || appointment.branch || 'Taguig Main', reason: '' });
-                          setRescheduleOriginal({ date: appointment.date || '', time: appointment.time || '' });
-                          setRescheduleErrors({});
-                          setRescheduleTakenTimes([]);
-                          setShowRescheduleModal(true);
-                        }}
-                      >
-                        <Text>Reschedule</Text>
-                      </TouchableOpacity>
+                      {appointment.status === 'scheduled' && (
+                        <TouchableOpacity 
+                          style={styles.actionBtn}
+                          onPress={() => {
+                            setRescheduleAppointmentId(appointment.id);
+                            const appointmentGownId = appointment.selectedGown || '';
+                            const appointmentGown = availableGowns.find(gown => (gown._id || gown.id) === appointmentGownId);
+                            setRescheduleGownId(appointmentGownId);
+                            setRescheduleData({ date: '', time: '', branch: appointmentGown?.branch || appointment.branch || 'Taguig Main', reason: '' });
+                            setRescheduleOriginal({ date: appointment.date || '', time: appointment.time || '' });
+                            setRescheduleErrors({});
+                            setRescheduleTakenTimes([]);
+                            setShowRescheduleModal(true);
+                          }}
+                        >
+                          <Text>Reschedule</Text>
+                        </TouchableOpacity>
+                      )}
                       <TouchableOpacity 
                         style={[styles.actionBtn, { borderColor: '#FCD34D', backgroundColor: '#FFF7ED' }]}
                         onPress={() => {
@@ -904,17 +1003,18 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
                     </View>
                   )}
                 </View>
-              ))) : (
-                <View style={styles.noAppointmentsBox}>
-                  <Calendar size={36} color="#E8DCC8" />
-                  <Text style={styles.noApptTitle}>No upcoming appointments</Text>
-                  <Text style={styles.noApptSub}>Past appointments appear in Appointment History.</Text>
-                  <TouchableOpacity style={styles.bookBtn} onPress={() => setActiveTab('new')}>
-                    <Text style={styles.bookBtnText}>Book Appointment</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
+                  ))) : (
+                    <View style={styles.noAppointmentsBox}>
+                      <Calendar size={36} color="#E8DCC8" />
+                      <Text style={styles.noApptTitle}>No upcoming appointments</Text>
+                      <Text style={styles.noApptSub}>Past appointments appear in Appointment History.</Text>
+                      <TouchableOpacity style={styles.bookBtn} onPress={() => setActiveTab('new')}>
+                        <Text style={styles.bookBtnText}>Book Appointment</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+              </View>
+            )
           )}
 
           {activeTab === 'history' && ( 
@@ -1226,7 +1326,16 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
               <Text style={[styles.label, { marginTop: 8 }]}>New Date *</Text>
               <TouchableOpacity
                 style={styles.input}
-                onPress={() => setShowRescheduleDatePicker(true)}
+                onPress={() => {
+                  if (Platform.OS !== 'web') {
+                    setShowRescheduleDatePicker(true);
+                    return;
+                  }
+                  setWebCalendarState({
+                    active: 'reschedule',
+                    display: rescheduleData.date ? parseLocalDateString(rescheduleData.date) : new Date(),
+                  });
+                }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Calendar size={18} color="#6B5D4F" />
@@ -1286,6 +1395,7 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
               {rescheduleGownId && (
                 <Text style={styles.branchHelpText}>Determined by the selected gown's inventory location.</Text>
               )}
+              {rescheduleErrors.branch ? <Text style={styles.errorMessage}>{rescheduleErrors.branch}</Text> : null}
 
               <Text style={[styles.label, { marginTop: 8 }]}>Reason for Rescheduling *</Text>
               <TextInput
@@ -1390,6 +1500,15 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
         </View>
       </Modal>
 
+      <CustomAlertModal
+        visible={alertConfig.visible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        mode={alertConfig.mode}
+        onConfirm={alertConfig.onConfirm}
+        onCancel={alertConfig.onCancel}
+        onClose={closeAppointmentAlert}
+      />
     </SafeAreaView>
   );
 }
@@ -1500,7 +1619,7 @@ const styles = StyleSheet.create({
   successModalCard: { width: '80%', backgroundColor: '#fff', borderRadius: 16, padding: 30, alignItems: 'center', elevation: 10 },
   successIconCircle: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#ECFDF5', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   successIcon: { fontSize: 40, color: '#10B981', fontWeight: 'bold' },
-  successTitle: { fontSize: 22, fontFamily: 'serif', color: '#1a1a1a', marginBottom: 12, fontWeight: '600' },
+  successTitle: { fontSize: 22, fontFamily: 'serif', color: '#1a1a1a', marginBottom: 12, fontWeight: '600', textAlign: 'center' },
   successMessage: { fontSize: 14, color: '#6B5D4F', textAlign: 'center', lineHeight: 20, marginBottom: 16 },
-  redirectText: { fontSize: 12, color: '#D4AF37', fontWeight: '500', fontStyle: 'italic' }
+  redirectText: { fontSize: 12, color: '#D4AF37', fontWeight: '500', fontStyle: 'italic', textAlign: 'center' }
 });

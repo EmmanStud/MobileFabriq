@@ -13,6 +13,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { X, Eye, EyeOff } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { passwordChecklist, sanitizeNameInput, validators } from '../services/authService';
 import { API_CONFIG } from '../services/apiConfig';
 
@@ -30,6 +31,7 @@ export default function EditProfileModal({
   onShowAlert,
   authToken,
 }) {
+  const insets = useSafeAreaInsets();
   // Safe validator assignment with fallbacks
   const validateFirstName = validators?.firstName || (() => '');
   const validateLastName = validators?.lastName || (() => '');
@@ -63,6 +65,16 @@ export default function EditProfileModal({
 
   // New password checklist
   const newPasswordChecklist = passwordChecklist(newPassword);
+
+  const isChangingPassword = showPasswordSection && (oldPassword || newPassword || confirmPassword);
+  const hasProfileChanges =
+    firstName !== (customerData?.firstName || '') ||
+    lastName !== (customerData?.lastName || '') ||
+    email !== (customerData?.email || '') ||
+    phone !== (customerData?.phone || '') ||
+    address !== (customerData?.address || '') ||
+    preferredBranch !== (customerData?.preferredBranch || 'Taguig Main - Cadena de Amor');
+  const canSave = hasProfileChanges || isChangingPassword;
 
   // Sync with customerData when modal opens
   useEffect(() => {
@@ -692,7 +704,7 @@ export default function EditProfileModal({
             )}
 
             {/* Action Buttons */}
-            <View style={styles.buttonContainer}>
+            <View style={[styles.buttonContainer, { paddingBottom: 20 + insets.bottom }]}>
               <TouchableOpacity
                 style={[styles.button, styles.cancelButton]}
                 onPress={handleClose}
@@ -701,9 +713,9 @@ export default function EditProfileModal({
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.button, styles.saveButton, isLoading && styles.buttonDisabled]}
+                style={[styles.button, styles.saveButton, (isLoading || !canSave) && styles.buttonDisabled]}
                 onPress={handleSave}
-                disabled={isLoading}
+                disabled={isLoading || !canSave}
               >
                 <Text style={styles.saveButtonText}>
                   {isLoading ? 'Saving...' : 'Save Changes'}

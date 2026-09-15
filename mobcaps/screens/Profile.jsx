@@ -19,6 +19,7 @@ import { sessionService } from '../services/sessionService';
 import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 import { mongodbService } from '../services/mongodbService';
 import { API_CONFIG } from '../services/apiConfig';
+import { MeasurementsSkeleton, FavoritesRowSkeleton, HistoryRowSkeleton } from '../components/Skeleton';
 
 const deriveNameParts = (source = {}) => {
   const directFirst = (source.firstName || '').trim();
@@ -952,7 +953,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
                 </View> 
            
                 {measurementsLoading ? ( 
-                  <ActivityIndicator size="small" color="#D4AF37" style={{ marginVertical: 20 }} /> 
+                  <MeasurementsSkeleton count={6} />
                 ) : ( 
                   <View style={styles.measurementsGrid}> 
                     {measurementFields.map(({ key, label }) => (
@@ -999,7 +1000,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
                 <Text style={styles.headerTitle}>Favorite Gowns</Text> 
               </View> 
               {favoritesLoading ? ( 
-                <ActivityIndicator size="small" color="#D4AF37" style={{ marginVertical: 20 }} /> 
+                <FavoritesRowSkeleton count={3} />
               ) : favorites.length === 0 ? ( 
                 <View style={{ alignItems: 'center', paddingVertical: 32 }}> 
                   <Heart size={40} color="#E8DCC8" /> 
@@ -1042,7 +1043,7 @@ export default function Profile({ navigation, route, onLogout, unreadCount = 0 }
                 <Text style={styles.headerTitle}>Order History</Text> 
               </View> 
               {historyLoading ? ( 
-                <ActivityIndicator size="small" color="#D4AF37" style={{ marginVertical: 20 }} /> 
+                <HistoryRowSkeleton count={3} />
               ) : history.length === 0 ? ( 
                 <View style={{ alignItems: 'center', paddingVertical: 32 }}> 
                   <History size={40} color="#E8DCC8" /> 

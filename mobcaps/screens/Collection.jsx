@@ -20,6 +20,7 @@ import { mongodbService } from '../services/mongodbService';
 import { API_CONFIG } from '../services/apiConfig';
 import HamburgerMenu from '../components/HamburgerMenu';
 import Header from '../components/Header';
+import { CollectionGridSkeleton } from '../components/Skeleton';
 import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 
 export default function Collection({ navigation, route, unreadCount = 0 }) {
@@ -401,12 +402,6 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
                 onBellPress={() => navigation.navigate('Notifications')} 
             /> 
 
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#1a1a1a" />
-                    <Text style={styles.loadingText}>Loading catalog...</Text>
-                </View>
-            ) : (
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <View style={styles.mainPadding}>
                     <View style={styles.header}>
@@ -416,62 +411,67 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
                         </Text>
                     </View>
 
-                    <View style={styles.controls}>
-                        <View style={styles.searchRow}>
-                            <Search size={16} color="#6B5D4F" />
-                            <TextInput
-                                style={styles.searchInput}
-                                placeholder="Search gowns..."
-                                value={searchQuery}
-                                onChangeText={setSearchQuery}
-                                placeholderTextColor="#6B5D4F"
+                    {loading ? (
+                        <CollectionGridSkeleton count={6} />
+                    ) : (
+                        <>
+                            <View style={styles.controls}>
+                                <View style={styles.searchRow}>
+                                    <Search size={16} color="#6B5D4F" />
+                                    <TextInput
+                                        style={styles.searchInput}
+                                        placeholder="Search gowns..."
+                                        value={searchQuery}
+                                        onChangeText={setSearchQuery}
+                                        placeholderTextColor="#6B5D4F"
+                                    />
+                                </View>
+
+                                <View style={styles.filterRow}>
+                                    {categories.map((cat) => (
+                                        <TouchableOpacity
+                                            key={cat}
+                                            style={[
+                                                styles.filterBtn,
+                                                selectedCategory === cat ? styles.filterBtnActive : styles.filterBtnInactive,
+                                            ]}
+                                            onPress={() => setSelectedCategory(cat)}
+                                        >
+                                            <Text style={selectedCategory === cat ? styles.filterTextActive : styles.filterTextInactive}>
+                                                {cat}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+
+                            <Text style={styles.results}>{filteredGowns.length} {filteredGowns.length === 1 ? 'gown' : 'gowns'} found</Text>
+
+                            <FlatList
+                                data={filteredGowns}
+                                renderItem={renderCard}
+                                keyExtractor={(i) => i.id}
+                                numColumns={2}
+                                columnWrapperStyle={styles.column}
+                                scrollEnabled={false}
+                                contentContainerStyle={{ paddingBottom: 40 }}
                             />
-                        </View>
 
-                        <View style={styles.filterRow}>
-                            {categories.map((cat) => (
-                                <TouchableOpacity
-                                    key={cat}
-                                    style={[
-                                        styles.filterBtn,
-                                        selectedCategory === cat ? styles.filterBtnActive : styles.filterBtnInactive,
-                                    ]}
-                                    onPress={() => setSelectedCategory(cat)}
-                                >
-                                    <Text style={selectedCategory === cat ? styles.filterTextActive : styles.filterTextInactive}>
-                                        {cat}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View>
-
-                    <Text style={styles.results}>{filteredGowns.length} {filteredGowns.length === 1 ? 'gown' : 'gowns'} found</Text>
-
-                    <FlatList
-                        data={filteredGowns}
-                        renderItem={renderCard}
-                        keyExtractor={(i) => i.id}
-                        numColumns={2}
-                        columnWrapperStyle={styles.column}
-                        scrollEnabled={false}
-                        contentContainerStyle={{ paddingBottom: 40 }}
-                    />
-
-                    {filteredGowns.length === 0 && (
-                        <View style={styles.emptyState}>
-                            <Text style={styles.emptyTitle}>No gowns found</Text>
-                            <TouchableOpacity
-                                style={styles.resetBtn}
-                                onPress={() => { setSearchQuery(''); setSelectedCategory('All'); }}
-                            >
-                                <Text style={styles.resetBtnText}>Reset Filters</Text>
-                            </TouchableOpacity>
-                        </View>
+                            {filteredGowns.length === 0 && (
+                                <View style={styles.emptyState}>
+                                    <Text style={styles.emptyTitle}>No gowns found</Text>
+                                    <TouchableOpacity
+                                        style={styles.resetBtn}
+                                        onPress={() => { setSearchQuery(''); setSelectedCategory('All'); }}
+                                    >
+                                        <Text style={styles.resetBtnText}>Reset Filters</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </>
                     )}
                 </View>
             </ScrollView>
-            )}
 
             <Modal visible={!!selectedGown} transparent animationType="fade">
                 <View style={styles.modalOverlay}>
@@ -659,9 +659,13 @@ export default function Collection({ navigation, route, unreadCount = 0 }) {
                                                 <TouchableOpacity 
                                                     style={styles.secondaryButton}
                                                     onPress={() => {
+                                                        const gownForFitting = selectedGown;
                                                         setSelectedGown(null);
                                                         if (isLoggedIn) {
-                                                            navigation.navigate('Appointments');
+                                                            navigation.navigate('Appointments', {
+                                                                selectedGown: gownForFitting,
+                                                                activeTab: 'new',
+                                                            });
                                                         } else {
                                                             navigation.navigate('Home', { openAuth: true });
                                                         }
