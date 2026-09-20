@@ -878,6 +878,8 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       }
     };
 
+    const asString = (val) => (typeof val === 'string' ? val : '');
+
     const checkSession = async () => {
       const logged = await sessionService.isLoggedIn();
       setIsLoggedIn(logged);
@@ -894,23 +896,47 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
           setOrdersLoading(false);
         }
         if (currentUser && currentUser.email) {
-          const fullName = currentUser.name || (currentUser.firstName ? `${currentUser.firstName} ${currentUser.lastName || ''}`.trim() : '');
-          const phone = currentUser.phoneNumber 
-            || currentUser.phone 
-            || currentUser.contactNumber 
-            || ''; 
-          // Strip leading +63 or 0, keep only 10 digits starting with 9 
-          const digits = phone.replace(/^\+63/, '').replace(/^0/, ''); 
-          const normalized = digits.startsWith('9') && digits.length === 10 
-            ? digits 
-            : ''; 
-          setFormData(prev => ({ 
-            ...prev, 
-            customerName: fullName, 
-            email: currentUser.email, 
-            contactNumber: normalized, 
-          })); 
-          setPhoneVerified(Boolean(currentUser.phoneVerified)); 
+          const fullName = asString(currentUser.name) || (asString(currentUser.firstName) ? `${asString(currentUser.firstName)} ${asString(currentUser.lastName)}`.trim() : '');
+          const cachedPhone = asString(currentUser.phoneNumber)
+            || asString(currentUser.phone)
+            || asString(currentUser.contactNumber);
+          // Strip leading +63 or 0, keep only 10 digits starting with 9
+          const cachedDigits = cachedPhone.replace(/^\+63/, '').replace(/^0/, '');
+          const cachedNormalized = cachedDigits.startsWith('9') && cachedDigits.length === 10
+            ? cachedDigits
+            : '';
+          setFormData(prev => ({
+            ...prev,
+            customerName: fullName,
+            email: currentUser.email,
+            contactNumber: cachedNormalized,
+          }));
+          setPhoneVerified(Boolean(currentUser.phoneVerified));
+
+          // The cached AsyncStorage user's phoneNumber is never refreshed by
+          // Profile.jsx's saveSession calls, so it can be stale or missing
+          // for accounts created before that field was tracked. Fetch the
+          // live profile as the authoritative source, without ever
+          // overwriting an already-filled value with a blank one.
+          try {
+            const profileResponse = await fetch(`${API_URL}/customers/profile`, {
+              headers: { Authorization: `Bearer ${session?.token}` },
+            });
+            if (profileResponse.ok) {
+              const profile = await profileResponse.json();
+              const livePhoneRaw = asString(profile?.phoneNumber);
+              const liveDigits = livePhoneRaw.replace(/^\+63/, '').replace(/^0/, '');
+              const liveNormalized = liveDigits.startsWith('9') && liveDigits.length === 10
+                ? liveDigits
+                : '';
+              if (liveNormalized) {
+                setFormData(prev => ({ ...prev, contactNumber: liveNormalized }));
+              }
+              setPhoneVerified(Boolean(profile?.phoneVerified ?? currentUser.phoneVerified));
+            }
+          } catch (profileError) {
+            console.warn('Bespoke: profile fetch failed, using cached contact number instead:', profileError);
+          }
         } else {
           setOrdersLoading(false);
         }

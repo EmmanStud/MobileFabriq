@@ -364,56 +364,71 @@ export default function Appointments({ navigation, route, unreadCount = 0 }) {
 
   // Populate name/email from session and fetch appointments (same pattern as Rentals)
   React.useEffect(() => {
+    const asString = (val) => (typeof val === 'string' ? val : '');
+
     const checkSession = async () => {
       const session = await sessionService.getSession();
-      if (session && session.isLoggedIn) {
-        setIsLoggedIn(true);
-        if (session.token) setAuthToken(session.token);
-        const current = await sessionService.getCurrentUser();
-        setCurrentUser(current || null);
-        let profile = null;
+      if (!session || !session.isLoggedIn) {
+        setAppointmentsLoading(false);
+        return;
+      }
+
+      setIsLoggedIn(true);
+      if (session.token) setAuthToken(session.token);
+      const current = await sessionService.getCurrentUser();
+      setCurrentUser(current || null);
+
+      // Session/cached-user data (always available) is applied first so a
+      // failure below never leaves the form blank.
+      const sessionEmail = asString(current?.email) || asString(session.email);
+      const nameFromSession = asString(session.name);
+      const nameFromUser = current && (asString(current.name) || (asString(current.firstName)
+        ? `${asString(current.firstName)} ${asString(current.lastName)}`.trim()
+        : ''));
+      const fallbackFullName = nameFromUser || nameFromSession || '';
+      const fallbackPhoneRaw = asString(current?.phoneNumber) || asString(current?.phone) || asString(current?.contactNumber);
+      const fallbackDigits = fallbackPhoneRaw.replace(/^\+63/, '').replace(/^0/, '');
+      const fallbackNormalized = fallbackDigits.startsWith('9') && fallbackDigits.length === 10 ? fallbackDigits : '';
+
+      setFormData(prev => ({
+        ...prev,
+        customerName: fallbackFullName || prev.customerName,
+        email: sessionEmail || prev.email,
+        contactNumber: fallbackNormalized || prev.contactNumber,
+      }));
+      setPhoneVerified(Boolean(current?.phoneVerified));
+
+      if (sessionEmail) {
+        setUserEmail(sessionEmail.toLowerCase());
+        await fetchUserAppointments(sessionEmail.toLowerCase());
+      } else {
+        setAppointmentsLoading(false);
+      }
+
+      // Live profile data refines the fallback above but must never be able
+      // to blank out a value that was already filled in from the cache.
+      try {
         const profileResponse = await fetch(`${API_URL}/customers/profile`, {
           headers: { Authorization: `Bearer ${session.token}` },
         });
-        if (profileResponse.ok) {
-          profile = await profileResponse.json();
-          const nextPreferredBranch = normalizePreferredBranch(profile.preferredBranch);
-          setPreferredBranch(nextPreferredBranch);
-          setFormData(prev => ({
-            ...prev,
-            branch: prev.appointmentType === 'fitting' ? prev.branch : nextPreferredBranch,
-          }));
-        }
-        if (current && current.email) {
-          setUserEmail(current.email.toLowerCase());
-          // Fetch user appointments from DB
-          await fetchUserAppointments(current.email.toLowerCase());
-        } else {
-          setAppointmentsLoading(false);
-        }
-        const nameFromSession = session.name;
-        const nameFromUser = current && (current.name || (current.firstName ? `${current.firstName} ${current.lastName || ''}`.trim() : ''));
-        const fullName = nameFromUser || nameFromSession || '';
+        if (!profileResponse.ok) return;
 
-        const phone = profile?.phoneNumber
-          || current?.phoneNumber
-          || current?.phone 
-          || current?.contactNumber 
-          || ''; 
-        const digits = phone.replace(/^\+63/, '').replace(/^0/, ''); 
-        const normalized = digits.startsWith('9') && digits.length === 10 
-          ? digits 
-          : ''; 
+        const profile = await profileResponse.json();
+        const nextPreferredBranch = normalizePreferredBranch(profile?.preferredBranch);
+        setPreferredBranch(nextPreferredBranch);
 
-        setFormData(prev => ({ 
-          ...prev, 
-          customerName: fullName || prev.customerName, 
-          email: current?.email || prev.email, 
-          contactNumber: normalized, 
-        })); 
+        const profilePhoneRaw = asString(profile?.phoneNumber);
+        const profileDigits = profilePhoneRaw.replace(/^\+63/, '').replace(/^0/, '');
+        const profileNormalized = profileDigits.startsWith('9') && profileDigits.length === 10 ? profileDigits : '';
+
+        setFormData(prev => ({
+          ...prev,
+          branch: prev.appointmentType === 'fitting' ? prev.branch : nextPreferredBranch,
+          contactNumber: profileNormalized || prev.contactNumber,
+        }));
         setPhoneVerified(Boolean(profile?.phoneVerified ?? current?.phoneVerified));
-      } else {
-        setAppointmentsLoading(false);
+      } catch (profileError) {
+        console.warn('Appointments: profile fetch failed, using cached session data instead:', profileError);
       }
     };
     checkSession();
