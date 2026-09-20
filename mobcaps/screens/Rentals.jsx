@@ -396,10 +396,7 @@ export default function Rentals({ navigation, route, unreadCount = 0 }) {
         if (selectedRental && String(selectedRental.id || selectedRental._id) === String(rentalId)) {
           setSelectedRental((prev) => ({ ...prev, ...result.rental }));
         }
-        showRentalAlert(
-          'Payment Verified',
-          'Your payment has been successfully verified and your rental is now confirmed for pickup.'
-        );
+        showRentalAlert('Payment Verified', 'Your payment has been verified by PayMongo.');
         return;
       }
 

@@ -340,6 +340,9 @@ export const mongodbService = {
       if (response.ok) {
         return { success: true, rental: body?.rental || body || null, status };
       }
+      if (status === 401) {
+        await sessionService.clearSession();
+      }
       // Web backend errors come in body.message not body.error 
       return {
         success: false,
@@ -376,6 +379,9 @@ export const mongodbService = {
       // If failed and original URL used localhost, try android emulator host
       const content = await response.text();
       console.warn('getRentalsByUser server response:', response.status, content);
+      if (response.status === 401) {
+        await sessionService.clearSession();
+      }
       return [];
     } catch (err) {
       console.error('❌ getRentalsByUser error:', err);

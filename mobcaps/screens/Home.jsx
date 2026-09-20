@@ -16,7 +16,7 @@ import {
 // Services
 import { userDB, validators, passwordChecklist, sanitizeNameInput } from '../services/authService';
 import { sessionService } from '../services/sessionService';
-import { API_URL } from '../services/apiConfig';
+import { API_URL, API_CONFIG } from '../services/apiConfig';
 import { passwordResetService, resetValidators } from '../services/passwordResetService';
 import { notificationAPI } from '../services/notificationAPI';
 import { registerForPushNotificationsAsync } from '../services/pushNotificationService';
@@ -132,7 +132,6 @@ const defaultTopGowns = [
     image: { uri: 'https://images.unsplash.com/photo-1765229280659-d35a2467b976?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080' }
   }
 ];
-
 const accountTermsSections = [
   {
     title: '1. Eligibility',
@@ -332,11 +331,11 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
 
   // Carousel handlers
   const nextSlide = () => {
-    setCurrentSlide((prev) => (prev + 1) % defaultTopGowns.length);
+    setCurrentSlide((prev) => featuredGowns.length ? (prev + 1) % featuredGowns.length : 0);
   };
 
   const prevSlide = () => {
-    setCurrentSlide((prev) => (prev - 1 + defaultTopGowns.length) % defaultTopGowns.length);
+    setCurrentSlide((prev) => featuredGowns.length ? (prev - 1 + featuredGowns.length) % featuredGowns.length : 0);
   };
 
   // Initial branding animation - show once then hide
@@ -414,7 +413,7 @@ export default function Home({ navigation, route, onLogin, onLogout, unreadCount
   useEffect(() => {
     const gownsInterval = setInterval(nextSlide, 5000);
     return () => clearInterval(gownsInterval);
-  }, []);
+  }, [featuredGowns.length]);
 
   // Check for existing session on mount
   useEffect(() => {

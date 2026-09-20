@@ -1,5 +1,14 @@
 import { API_URL, fetchAPI } from './apiConfig';
 
+const readResponseBody = async (response) => {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await response.text();
+    return { message: text.slice(0, 160) || `Request failed (${response.status})` };
+  }
+  return response.json().catch(() => ({ message: `Request failed (${response.status})` }));
+};
+
 /**
  * Notification Service
  * Handles API interactions for user notifications
@@ -20,11 +29,11 @@ export const notificationAPI = {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await readResponseBody(response);
         throw new Error(errorData.message || 'Failed to fetch notifications');
       }
 
-      return await response.json();
+      return await readResponseBody(response);
     } catch (error) {
       console.error('Error in getMyNotifications:', error.message);
       throw error;
@@ -47,11 +56,11 @@ export const notificationAPI = {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await readResponseBody(response);
         throw new Error(errorData.message || 'Failed to mark notification as read');
       }
 
-      return await response.json();
+      return await readResponseBody(response);
     } catch (error) {
       console.error(`Error in markNotificationRead for ID ${id}:`, error.message);
       throw error;
@@ -75,11 +84,11 @@ export const notificationAPI = {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await readResponseBody(response);
         throw new Error(errorData.message || 'Failed to register device token');
       }
 
-      return await response.json();
+      return await readResponseBody(response);
     } catch (error) {
       console.error('Error in registerDeviceToken:', error.message);
       throw error;
