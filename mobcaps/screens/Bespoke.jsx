@@ -180,6 +180,8 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
   // Camera State
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraVisible, setCameraVisible] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [isTakingPicture, setIsTakingPicture] = useState(false);
   const [capturedImage, setCapturedImage] = useState(null);
   const [skinAnalysis, setSkinAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -654,12 +656,14 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       }
     }
     setShowAIModal(false);
+    setCameraReady(false);
     setCameraVisible(true);
   };
 
   const takePicture = async () => {
-    if (!cameraRef.current || isCapturingRef.current) return;
-    isCapturingRef.current = true;
+  if (!cameraRef.current || !cameraReady || isCapturingRef.current || isTakingPicture) return;
+  isCapturingRef.current = true;
+    setIsTakingPicture(true);
     try {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
@@ -692,6 +696,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       openAlert({ title: 'Error', message: 'Could not take photo. Please try again.' });
     } finally {
       isCapturingRef.current = false;
+      setIsTakingPicture(false);
     }
   };
 
@@ -2568,12 +2573,15 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
       {/* CAMERA MODAL */}
       <Modal visible={cameraVisible} animationType="slide">
         <SafeAreaView style={styles.cameraContainer}>
-          <CameraView
-            ref={cameraRef}
-            style={styles.camera}
-            facing="front"
-          >
-            <View style={styles.cameraOverlay}>
+          {cameraVisible && (
+            <CameraView
+              ref={cameraRef}
+              style={styles.camera}
+              facing="front"
+              onCameraReady={() => setCameraReady(true)}
+            />
+          )}
+          <View style={styles.cameraOverlay}>
 
               {/* Top bar */}
               <View style={styles.cameraTopBar}>
@@ -2657,11 +2665,14 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
 
               {/* Bottom controls */}
               <View style={styles.cameraControls}>
-                <Text style={styles.captureHint}>Tap to capture and analyze</Text>
+                <Text style={styles.captureHint}>
+                  {cameraReady ? 'Tap to capture and analyze' : 'Starting camera...'}
+                </Text>
                 <TouchableOpacity
                   style={styles.captureBtn}
                   onPress={takePicture}
                   activeOpacity={0.8}
+                  disabled={!cameraReady || isTakingPicture}
                 >
                   <View style={styles.captureBtnRing}>
                     <View style={styles.captureBtnInner} />
@@ -2670,8 +2681,7 @@ export default function Bespoke({ navigation, route, unreadCount = 0 }) {
                 <Text style={styles.captureHintSub}>Good lighting = better results</Text>
               </View>
 
-            </View>
-          </CameraView>
+          </View>
         </SafeAreaView>
       </Modal>
 
@@ -4610,7 +4620,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cameraOverlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'transparent',
     justifyContent: 'space-between',
   },
@@ -4655,6 +4665,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+    transform: [{ translateY: -380 }],
   },
   faceFrameSideOverlay: {
     position: 'absolute',

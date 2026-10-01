@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import Svg, { Path, Ellipse } from 'react-native-svg';
 import { ArrowLeft, Camera, RefreshCw } from 'lucide-react-native';
@@ -16,12 +18,15 @@ import { useChatVisibility } from '../contexts/ChatVisibilityContext';
 
 export default function MeasurementCamera({ navigation, route }) {
   const { setChatHidden } = useChatVisibility();
+  const isFocused = useIsFocused();
+  const insets = useSafeAreaInsets();
   const height = route?.params?.height;
   const cameraRef = useRef(null);
   const countdownRef = useRef(null);
   const warningTimeoutRef = useRef(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState('front');
+  const [cameraReady, setCameraReady] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [message, setMessage] = useState('');
   const [invalidReason, setInvalidReason] = useState('');
@@ -54,7 +59,7 @@ export default function MeasurementCamera({ navigation, route }) {
   }, []);
 
   const startCountdown = () => {
-    if (isAnalyzing || countdown !== null) return;
+    if (isAnalyzing || countdown !== null || !cameraReady) return;
 
     if (timerDuration === 0) {
       handleCapture();
@@ -91,7 +96,7 @@ export default function MeasurementCamera({ navigation, route }) {
   };
 
   const handleCapture = async () => {
-    if (isAnalyzing || !cameraRef.current) return;
+    if (isAnalyzing || !cameraReady || !cameraRef.current) return;
 
     if (warningTimeoutRef.current) {
       clearTimeout(warningTimeoutRef.current);
@@ -180,7 +185,22 @@ export default function MeasurementCamera({ navigation, route }) {
 
   return (
     <View style={styles.cameraScreen}>
-      <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing={facing} />
+      {isFocused && (
+        <CameraView
+          key={facing}
+          ref={cameraRef}
+          style={styles.cameraPreview}
+          facing={facing}
+          onCameraReady={() => {
+            setCameraReady(true);
+            setMessage('');
+          }}
+          onMountError={({ message: errorMessage }) => {
+            setCameraReady(false);
+            setMessage(`Camera failed to start: ${errorMessage}`);
+          }}
+        />
+      )}
       {!isAnalyzing && (
         <View style={styles.guideOverlay} pointerEvents="none">
           <Svg width="220" height="480" viewBox="0 0 220 480">
@@ -195,97 +215,112 @@ export default function MeasurementCamera({ navigation, route }) {
           </Svg>
         </View>
       )}
-      {timerMenuOpen && countdown === null && (
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1}
-          onPress={() => setTimerMenuOpen(false)}
-        />
-      )}
-      <SafeAreaView style={styles.overlay}>
-        <View style={styles.topBar}>
+      <Modal
+        visible={isFocused}
+        transparent
+        animationType="none"
+        presentationStyle="overFullScreen"
+        onRequestClose={() => navigation.goBack()}
+      >
+        <View style={styles.overlay} pointerEvents="box-none">
+          {timerMenuOpen && countdown === null && (
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setTimerMenuOpen(false)}
+            />
+          )}
+          <SafeAreaView style={styles.overlayContent}>
+          <View style={[styles.topBar, { transform: [{ translateY: 10 }] }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton} disabled={isAnalyzing}>
             <ArrowLeft size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.cameraTitle}>Position yourself</Text>
-          <TouchableOpacity onPress={() => setFacing((current) => current === 'front' ? 'back' : 'front')} style={styles.iconButton} disabled={isAnalyzing}>
+          <TouchableOpacity onPress={() => {
+            setCameraReady(false);
+            setFacing((current) => current === 'front' ? 'back' : 'front');
+          }} style={styles.iconButton} disabled={isAnalyzing}>
             <RefreshCw size={20} color="#fff" />
           </TouchableOpacity>
-        </View>
+          </View>
 
-        <View style={styles.instructions}>
-          <Text style={styles.instructionTitle}>Full body in frame</Text>
-          <Text style={styles.instructionText}>
-            Stand upright and face the camera. Keep your arms and legs visible, remove anything blocking your body,
-            use good lighting, and make sure only one person is visible. Stand far enough away for your entire body to fit.
-          </Text>
-        </View>
+          <View style={styles.instructions}>
+            <Text style={styles.instructionTitle}>Full body in frame</Text>
+            <Text style={styles.instructionText}>
+              Stand upright and face the camera. Keep your arms and legs visible, remove anything blocking your body,
+              use good lighting, and make sure only one person is visible. Stand far enough away for your entire body to fit.
+            </Text>
+          </View>
 
-        <View style={styles.bottomControls}>
-          {message && !isAnalyzing ? <Text style={styles.status}>{message}</Text> : null}
-          {invalidReason ? <Text style={styles.invalidReason}>{invalidReason}</Text> : null}
-          {isAnalyzing ? (
-            <View style={styles.loadingButton}>
-              <ActivityIndicator color="#D4AF37" />
-              <Text style={styles.loadingText}>Analyzing your photo... this can take up to 30 seconds</Text>
-            </View>
-          ) : (
-            <View style={styles.captureRow}>
-              <TouchableOpacity style={styles.captureButton} onPress={startCountdown} disabled={countdown !== null}>
-                <View style={styles.captureInner}><Camera size={24} color="#000" /></View>
-                <Text style={styles.captureLabel}>{invalidReason ? 'Retake Photo' : 'Capture Photo'}</Text>
-              </TouchableOpacity>
-
-              <View style={styles.timerDropdownWrap}>
-                {timerMenuOpen && (
-                  <View style={styles.timerMenu}>
-                    {timerOptions.map((opt) => (
-                      <TouchableOpacity
-                        key={opt.value}
-                        style={[styles.timerMenuItem, timerDuration === opt.value && styles.timerMenuItemActive]}
-                        onPress={() => {
-                          setTimerDuration(opt.value);
-                          setTimerMenuOpen(false);
-                        }}
-                      >
-                        <Text style={[styles.timerMenuItemText, timerDuration === opt.value && styles.timerMenuItemTextActive]}>
-                          {opt.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.timerDropdownButton}
-                  disabled={countdown !== null}
-                  onPress={() => setTimerMenuOpen((open) => !open)}
-                >
-                  <Text style={styles.timerDropdownText}>
-                    {timerOptions.find((o) => o.value === timerDuration)?.label} ⌄
-                  </Text>
-                </TouchableOpacity>
+          <View style={[styles.bottomControls, { marginBottom: -insets.bottom, paddingBottom: 28 + insets.bottom }]}>
+            {message && !isAnalyzing ? <Text style={styles.status}>{message}</Text> : null}
+            {invalidReason ? <Text style={styles.invalidReason}>{invalidReason}</Text> : null}
+            {isAnalyzing ? (
+              <View style={styles.loadingButton}>
+                <ActivityIndicator color="#D4AF37" />
+                <Text style={styles.loadingText}>Analyzing your photo... this can take up to 30 seconds</Text>
               </View>
-            </View>
+            ) : (
+              <View style={styles.captureRow}>
+                <TouchableOpacity style={styles.captureButton} onPress={startCountdown} disabled={!cameraReady || countdown !== null}>
+                  <View style={styles.captureInner}><Camera size={24} color="#000" /></View>
+                  <Text style={styles.captureLabel}>{invalidReason ? 'Retake Photo' : 'Capture Photo'}</Text>
+                </TouchableOpacity>
+
+                <View style={styles.timerDropdownWrap}>
+                  {timerMenuOpen && (
+                    <View style={styles.timerMenu}>
+                      {timerOptions.map((opt) => (
+                        <TouchableOpacity
+                          key={opt.value}
+                          style={[styles.timerMenuItem, timerDuration === opt.value && styles.timerMenuItemActive]}
+                          onPress={() => {
+                            setTimerDuration(opt.value);
+                            setTimerMenuOpen(false);
+                          }}
+                        >
+                          <Text style={[styles.timerMenuItemText, timerDuration === opt.value && styles.timerMenuItemTextActive]}>
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    style={styles.timerDropdownButton}
+                    disabled={countdown !== null}
+                    onPress={() => setTimerMenuOpen((open) => !open)}
+                  >
+                    <Text style={styles.timerDropdownText}>
+                      {timerOptions.find((o) => o.value === timerDuration)?.label} ⌄
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+          </SafeAreaView>
+          {countdown !== null && (
+            <TouchableOpacity style={styles.countdownOverlay} onPress={cancelCountdown} activeOpacity={0.8}>
+              <Text style={styles.countdownNumber}>{countdown}</Text>
+              <Text style={styles.countdownHint}>Tap to cancel</Text>
+            </TouchableOpacity>
           )}
         </View>
-      </SafeAreaView>
-      {countdown !== null && (
-        <TouchableOpacity style={styles.countdownOverlay} onPress={cancelCountdown} activeOpacity={0.8}>
-          <Text style={styles.countdownNumber}>{countdown}</Text>
-          <Text style={styles.countdownHint}>Tap to cancel</Text>
-        </TouchableOpacity>
-      )}
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   cameraScreen: { flex: 1, backgroundColor: '#000' },
+  cameraPreview: { flex: 1 },
   guideOverlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 1,
   },
   countdownOverlay: {
     position: 'absolute',
@@ -296,7 +331,8 @@ const styles = StyleSheet.create({
   },
   countdownNumber: { color: '#D4AF37', fontSize: 96, fontWeight: '700' },
   countdownHint: { color: '#fff', fontSize: 14, marginTop: 8 },
-  overlay: { flex: 1, justifyContent: 'space-between' },
+  overlay: { flex: 1, zIndex: 2 },
+  overlayContent: { flex: 1, justifyContent: 'space-between' },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: 'rgba(0,0,0,0.42)' },
   iconButton: { width: 42, height: 42, justifyContent: 'center', alignItems: 'center' },
   cameraTitle: { color: '#fff', fontSize: 18, fontWeight: '600' },
